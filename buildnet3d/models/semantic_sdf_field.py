@@ -53,7 +53,7 @@ from torch import Tensor, nn
 
 @dataclass
 class SemanticSDFFieldConfig(SDFFieldConfig):
-    """Semantic-SDF Field Config"""
+    """Semantic-SDF Field Config with RGB uncertainty"""
 
     _target: Type = field(default_factory=lambda: SemanticSDFField)
     num_semantic_classes: int = 5   # Number of classes in the segmentation
@@ -62,12 +62,12 @@ class SemanticSDFFieldConfig(SDFFieldConfig):
     """Number of layers for the semantic neural network"""
     semantic_mlp_layer_width: int = 128
     """Numbers of neurons in one layer of the semantic MLP"""
+    # semantic_beta_min: float = 0.01
+    # """Minimum value for semantic uncertainty."""
     rgb_uncertainty_mlp_number_layers: int = 2
     """Number of layers for RGB uncertainty MLP"""
     rgb_uncertainty_mlp_layer_width: int = 64
     """Width of layers for RGB uncertainty MLP"""
-    # semantic_beta_min: float = 0.01
-    # """Minimum value for semantic uncertainty."""
 
 
 class SemanticSDFField(SDFField):
@@ -106,21 +106,23 @@ class SemanticSDFField(SDFField):
             in_dim=self.config.geo_feat_dim,
             layer_width=self.config.semantic_mlp_layer_width,
             num_layers=self.config.semantic_mlp_number_layers,
-            out_dim=self.config.num_semantic_classes + 1,  # +1 for uncertainty
+            out_dim=self.config.num_semantic_classes, 
             activation=nn.ReLU(),
             out_activation=None,   # uncertainty will be handled in the head
         )
-
-        # RGB uncertainty MLP - predicts variance for each RGB channel
+        
+        # RGB uncertainty MLP - predicts variance for single channel
         self.mlp_rgb_uncertainty = MLP(
             in_dim=self.config.geo_feat_dim,
             layer_width=self.config.rgb_uncertainty_mlp_layer_width,
             num_layers=self.config.rgb_uncertainty_mlp_number_layers,
-            out_dim=1,  
+            out_dim=1,  # 单通道方差（标量）
             activation=nn.ReLU(),
-            out_activation=nn.Softplus(),  # ensure positive variance
+            out_activation=nn.Softplus(),  # 确保方差为正
         )
 
+
+        # semantic head
         self.field_head_semantic = SemanticFieldHead(
             in_dim=self.mlp_semantic.get_out_dim(),
             num_classes=self.num_semantic_classes,
@@ -130,25 +132,27 @@ class SemanticSDFField(SDFField):
         #     in_dim=self.mlp_semantic.get_out_dim(),
         #     beta_min=self.config.semantic_beta_min
         # )
-
-    def get_colors(
-        self,
-        points: Tensor,
-        directions: Tensor,
-        gradients: Tensor,
-        geo_feature: Tensor,
-        camera_indices: Tensor,
-    ) -> Tuple[Tensor, Tensor]:
-        """Get RGB colors and uncertainties with uncertainty estimation."""
-        # Get base RGB color
-        rgb = super().get_colors(
-            points, directions, gradients, geo_feature, camera_indices
-        )
         
-        # Get RGB uncertainty (variance) from geo features
-        rgb_uncertainty = self.mlp_rgb_uncertainty(geo_feature)
         
-        return rgb, rgb_uncertainty
+    # def get_colors(
+    #     self,
+    #     points: Tensor,
+    #     directions: Tensor,
+    #     gradients: Tensor,
+    #     geo_feature: Tensor,
+    #     camera_indices: Tensor,
+    # ) -> Tuple[Tensor, Tensor]:
+    #     """Get RGB colors and uncertainties with uncertainty estimation."""
+    #     # Get base RGB color
+    #     rgb = super().get_colors(
+    #         points, directions, gradients, geo_feature, camera_indices
+    #     )
+        
+    #     # Get RGB uncertainty (variance) from geo features
+    #     rgb_uncertainty = self.mlp_rgb_uncertainty(geo_feature)
+        
+    #     return rgb, rgb_uncertainty
+    
     
         
     def get_outputs(
@@ -191,26 +195,21 @@ class SemanticSDFField(SDFField):
             only_inputs=True,
         )[0]
 
-        # rgb = self.get_colors(
-        #     inputs, directions_flat, gradients, geo_feature, camera_indices
-        # )
-
-        # Get RGB and RGB uncertainty
         rgb = super().get_colors(
             inputs, directions_flat, gradients, geo_feature, camera_indices
         )
         rgb_uncertainty = self.mlp_rgb_uncertainty(geo_feature)  # [num_points, 1]
 
 
+        # semantic outputs
         semantics_input = geo_feature.view(-1, self.config.geo_feat_dim)
         semantics_output = self.mlp_semantic(semantics_input)
         # Pass the full semantic MLP output to the semantic head, which projects to num_classes
         semantics = self.field_head_semantic(semantics_output)
         # semantic_uncertainty = self.field_head_semantic_uncertainty(semantics_output)
 
-        # reshape outputs
         rgb = rgb.view(*ray_samples.frustums.directions.shape[:-1], -1)
-        rgb_uncertainty = rgb_uncertainty.view(*ray_samples.frustums.directions.shape[:-1], -1)   # rgb uncertainty
+        rgb_uncertainty = rgb_uncertainty.view(*ray_samples.frustums.directions.shape[:-1], -1)  # [..., 1]
         sdf = sdf.view(*ray_samples.frustums.directions.shape[:-1], -1)
         gradients = gradients.view(*ray_samples.frustums.directions.shape[:-1], -1)
         normals = torch.nn.functional.normalize(gradients, p=2, dim=-1)
@@ -225,6 +224,7 @@ class SemanticSDFField(SDFField):
                 FieldHeadNames.GRADIENT: gradients,
                 FieldHeadNames.SEMANTICS: semantics,
                 # "semantic_uncertainty": semantic_uncertainty,
+                
             }
         )
 
