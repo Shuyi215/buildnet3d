@@ -1,3 +1,5 @@
+# model.configs.py
+
 from nerfstudio.cameras.camera_optimizers import CameraOptimizerConfig
 from nerfstudio.configs.base_config import ViewerConfig
 from nerfstudio.data.datamanagers.base_datamanager import (
@@ -25,8 +27,8 @@ from buildnet3d.models.semantic_sdf_field import SemanticSDFFieldConfig
 
 NeuSTrackConfig = TrainerConfig(
     method_name="neus",
-    steps_per_eval_image=1000,
-    steps_per_eval_batch=5000,
+    steps_per_eval_image=1500,
+    steps_per_eval_batch=500,
     steps_per_save=10000,
     steps_per_eval_all_images=1000000,
     max_num_iterations=300001,
@@ -36,8 +38,8 @@ NeuSTrackConfig = TrainerConfig(
         datamanager=VanillaDataManagerConfig(
             _target=VanillaDataManager[BuildNetDataset],
             dataparser=BuildNetDataParserConfig(),
-            train_num_rays_per_batch=2048,
-            eval_num_rays_per_batch=2048,
+            train_num_rays_per_batch=1024,
+            eval_num_rays_per_batch=256,
         ),
         model=NeuSModelConfig(
             sdf_field=SDFFieldConfig(
@@ -49,7 +51,7 @@ NeuSTrackConfig = TrainerConfig(
             far_plane=50.0,
             background_model="none",
             overwrite_near_far_plane=True,
-            eval_num_rays_per_chunk=1024,
+            eval_num_rays_per_chunk=256,
         ),
     ),
     optimizers={
@@ -113,19 +115,19 @@ NeRFactoTrackConfig = TrainerConfig(
 
 SemanticSDFTrackConfig = TrainerConfig(
     method_name="semantic-sdf",
-    steps_per_eval_image=1000,
-    steps_per_eval_batch=5000,
-    steps_per_save=10000,
+    steps_per_eval_image=1500,     # default 1500
+    steps_per_eval_batch=500,
+    steps_per_save=5000,
     steps_per_eval_all_images=1000000,
     max_num_iterations=300001,
-    save_only_latest_checkpoint= True,
+    save_only_latest_checkpoint= False,
     mixed_precision=False,
     pipeline=VanillaPipelineConfig(
         datamanager=VanillaDataManagerConfig(
             _target=VanillaDataManager[BuildNetDataset],
             dataparser=BuildNetDataParserConfig(),
-            train_num_rays_per_batch=2048,
-            eval_num_rays_per_batch=2048,
+            train_num_rays_per_batch=512,
+            eval_num_rays_per_batch=256,
         ),
         model=SemanticSDFModelConfig(
             near_plane=0.5,
@@ -140,7 +142,7 @@ SemanticSDFTrackConfig = TrainerConfig(
                 inside_outside=False,
             ),
             background_model="none",
-            eval_num_rays_per_chunk=1024,
+            eval_num_rays_per_chunk=256,
             semantic_loss_mult=0.5,
             eikonal_loss_mult=0.1,
         ),
