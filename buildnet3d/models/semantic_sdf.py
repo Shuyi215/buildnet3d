@@ -1,6 +1,3 @@
-# semantic_sdf.py
-
-
 """
 Implementation of Semantic-SDF. This model is built on top of NeusFacto and adds
 a 3D semantic segmentation model.
@@ -21,34 +18,31 @@ from nerfstudio.model_components.renderers import SemanticRenderer
 from nerfstudio.models.neus import NeuSModel, NeuSModelConfig
 from nerfstudio.utils import colormaps
 from nerfstudio.utils.rich_utils import CONSOLE
-from nerfstudio.model_components.renderers import UncertaintyRenderer
+
 
 @dataclass
 class SemanticSDFModelConfig(NeuSModelConfig):
-    """Semantic-SDF Model Config"""
+    """Semantic-SDF Model Config
+
+    Extended with RGB uncertainty support. The uncertainty is modeled as a
+    per-sample log-variance and aggregated along the ray using volume weights.
+    Loss is replaced by a heteroscedastic likelihood when enabled.
+    """
 
     _target: Type = field(default_factory=lambda: SemanticSDFModel)
-    beta_min: float = 0.01
-    """Minimum value for uncertainty."""
-
-    semantic_loss_mult: float = 1.0
-    """Factor that multiplies the semantic loss"""
-
-    density_loss_mult: float = 0.01
-    """Strength for regularization to force sparse density."""
-
-    rendered_uncertainty_eps: float = 1e-6
-    """Value for clamping the rendered uncertainty (variance) when computing NLL."""
-    
+    # semantic_loss_mult: float = 1.0
+    # Factor that multiplies the semantic loss
+    use_rgb_uncertainty: bool = True
+    """Enable heteroscedastic RGB uncertainty modeling."""
     rgb_uncertainty_loss_mult: float = 1.0
-    """Multiplier for RGB uncertainty NLL loss."""
-    
-    rgb_beta_min: float = 0.01
-    """Minimum value for RGB uncertainty to avoid numerical issues."""
+    """Global multiplier for the uncertainty-weighted RGB loss."""
+    fg_mask_loss_mult: float = 0.1
+    """Global multiplier for the foreground mask loss."""
 
 
 class SemanticSDFModel(NeuSModel):
-    """SemanticSDFModel extends NeuSFactoModel to add semantic segmentation in 3D."""
+    """SemanticSDFModel extends NeuSModel and (optionally) adds semantic segmentation
+    and RGB uncertainty prediction (heteroscedastic regression)."""
 
     config: SemanticSDFModelConfig
 
@@ -61,15 +55,15 @@ class SemanticSDFModel(NeuSModel):
         """
         super().__init__(config=config, **kwargs)
 
-        assert "semantics" in metadata.keys() and isinstance(
-            metadata["semantics"], Semantics
-        )
-        self.colormap = metadata["semantics"].colors.clone().detach().to(self.device)
+        # assert "semantics" in metadata.keys() and isinstance(
+        #     metadata["semantics"], Semantics
+        # )
+        # self.colormap = metadata["semantics"].colors.clone().detach().to(self.device)
 
-        self.color_mapping = {
-            tuple(np.round(np.array(color), 3)): index
-            for index, color in enumerate(metadata["semantics"].colors.tolist())
-        }
+        # self.color_mapping = {
+        #     tuple(np.round(np.array(color), 3)): index
+        #     for index, color in enumerate(metadata["semantics"].colors.tolist())
+        # }
         self._logger = logging.getLogger(__name__)
 
         self.step = 0
@@ -79,77 +73,78 @@ class SemanticSDFModel(NeuSModel):
         super().populate_modules()
 
         # Fields
-        self.field = self.config.sdf_field.setup(
-            aabb=self.scene_box.aabb,
-            num_images=self.num_train_data,
-            use_average_appearance_embedding=(
-                self.config.use_average_appearance_embedding
-            ),
-            spatial_distortion=self.scene_contraction,
-        )
+        # self.field = self.config.sdf_field.setup(
+        #     aabb=self.scene_box.aabb,
+        #     num_images=self.num_train_data,
+        #     use_average_appearance_embedding=(
+        #         self.config.use_average_appearance_embedding
+        #     ),
+        #     spatial_distortion=self.scene_contraction,
+        # )
 
-        self.renderer_semantics = SemanticRenderer()
-        self.semantic_loss = torch.nn.CrossEntropyLoss(reduction="mean")
-        self.renderer_uncertainty = UncertaintyRenderer()
-
+        # self.renderer_semantics = SemanticRenderer()
+        # self.semantic_loss = torch.nn.CrossEntropyLoss(reduction="mean")
 
     def get_outputs(self, ray_bundle: RayBundle) -> Dict[str, torch.Tensor]:
-        """Pass the `ray_bundle` through the model's field and renderer to get
-        the model's output."""
-        outputs = super().get_outputs(ray_bundle)
-        
-        # get field outputs for points
+        """Custom forward to inject RGB uncertainty aggregation after standard NeuS rendering."""
+        # Reuse NeuS sampling logic
         samples_and_field_outputs = self.sample_and_forward_field(ray_bundle=ray_bundle)
 
         field_outputs: Dict[FieldHeadNames, torch.Tensor] = cast(
-            Dict[FieldHeadNames, torch.Tensor],
-            samples_and_field_outputs["field_outputs"],
+            Dict[FieldHeadNames, torch.Tensor], samples_and_field_outputs["field_outputs"]
         )
+        ray_samples = samples_and_field_outputs["ray_samples"]
+        weights = samples_and_field_outputs["weights"]
+        bg_transmittance = samples_and_field_outputs["bg_transmittance"]
 
-        outputs["semantics"] = self.renderer_semantics(
-            field_outputs[FieldHeadNames.SEMANTICS], weights=outputs["weights"]
-        )
+        # Standard surface rendering logic (copied from SurfaceModel.get_outputs)
+        rgb = self.renderer_rgb(rgb=field_outputs[FieldHeadNames.RGB], weights=weights)
+        depth = self.renderer_depth(weights=weights, ray_samples=ray_samples)
+        assert (
+            ray_bundle.metadata is not None and "directions_norm" in ray_bundle.metadata
+        ), "directions_norm is required in ray_bundle.metadata"
+        depth = depth / ray_bundle.metadata["directions_norm"]
+        normal = self.renderer_normal(semantics=field_outputs[FieldHeadNames.NORMALS], weights=weights)
+        accumulation = self.renderer_accumulation(weights=weights)
 
-        # semantics colormaps
-        semantic_labels = torch.argmax(
-            torch.nn.functional.softmax(outputs["semantics"], dim=-1), dim=-1
-        )
-        outputs["semantics_colormap"] = self.colormap.to(semantic_labels.device)[semantic_labels]
+        # Background blending disabled if background_model == "none" (like base)
+        if self.config.background_model != "none":
+            # We defer to parent implementation if needed; for now assume none for semantic-sdf use-case.
+            self._logger.warning("Background model active; current uncertainty pipeline does not alter background.")
 
+        outputs = {
+            "rgb": rgb,
+            "accumulation": accumulation,
+            "depth": depth,
+            "normal": normal,
+            "weights": weights,
+            "directions_norm": ray_bundle.metadata["directions_norm"],
+        }
 
-        # RGB uncertainty rendering - single channel
-        if FieldHeadNames.RGB_UNCERTAINTY in field_outputs:
-            point_rgb_uncertainty = field_outputs[FieldHeadNames.RGB_UNCERTAINTY]
-            
-            # numerical stability(ActiveNerfacto）
-            if torch.isnan(point_rgb_uncertainty).any():
-                point_rgb_uncertainty = torch.nan_to_num(point_rgb_uncertainty, 0.0)
-            
+        # Aggregate RGB uncertainty (weighted sum of per-sample log-variance)
+        if self.config.use_rgb_uncertainty and "rgb_uncertainty" in field_outputs:
+            # field_outputs["rgb_uncertainty"] shape: [R, S, 3]
+            per_sample_logvar = field_outputs["rgb_uncertainty"]
+            # Match weighting shape to [R, S, 1] without introducing extra dims
+            w = weights
+            if w.dim() == per_sample_logvar.dim() - 1:
+                w = w.unsqueeze(-1)
+            # Weighted sum along sample dimension (-2) similar to RGB renderer
+            rgb_logvar = torch.sum(per_sample_logvar * w, dim=-2)
+            outputs["rgb_uncertainty"] = rgb_logvar
+            # Also expose variance for downstream visualization/analysis
+            outputs["rgb_uncertainty_var"] = torch.exp(rgb_logvar)
 
-            rgb_var = self.renderer_uncertainty(
-                betas=point_rgb_uncertainty, 
-                weights=outputs["weights"]**2
-            )
-            
-            outputs["rendered_rgb_uncertainty"] = rgb_var
-            outputs["rendered_rgb_std"] = torch.sqrt(rgb_var)
-        else:
-            outputs["rendered_rgb_uncertainty"] = torch.zeros_like(outputs["rgb"][..., :1])
-            outputs["rendered_rgb_std"] = torch.zeros_like(outputs["rgb"][..., :1])
+        if self.training:
+            grad_points = field_outputs[FieldHeadNames.GRADIENT]
+            outputs.update({"eik_grad": grad_points})
+            outputs.update(samples_and_field_outputs)
+            if self.config.use_rgb_uncertainty and "rgb_uncertainty" in field_outputs:
+                outputs["rgb_uncertainty_samples"] = field_outputs["rgb_uncertainty"]
+                outputs["rgb_uncertainty_samples_var"] = torch.exp(field_outputs["rgb_uncertainty"])  # [R,S,3]
 
-
-        # # render uncertainty
-        # point_semantic_uncertainty = field_outputs["semantic_uncertainty"]
-        # # Fix shape mismatch between betas and weights
-        # if point_semantic_uncertainty.shape != outputs["weights"].shape:
-        #     point_semantic_uncertainty = point_semantic_uncertainty.reshape(outputs["weights"].shape)
-        # rendered_semantic_uncertainty = self.renderer_uncertainty(
-        #     betas=point_semantic_uncertainty,
-        #     weights=outputs["weights"]**2
-        # )
-        # outputs["rendered_semantic_uncertainty"] = rendered_semantic_uncertainty
-        # outputs["rendered_semantic_std"] = torch.sqrt(rendered_semantic_uncertainty)
-
+        # Normal visualization
+        outputs["normal_vis"] = (outputs["normal"] + 1.0) / 2.0
         return outputs
 
     def get_loss_dict(
@@ -159,83 +154,62 @@ class SemanticSDFModel(NeuSModel):
         metrics_dict: Optional[Dict[str, Any]] = None,
         step: int = 0,
     ) -> Dict[str, Any]:
-        """Compute the loss dictionary from the `outputs` of the model, the `batch`
-        that contains the ground truth data and the `metrics_dict`."""
+        """Extend loss with heteroscedastic RGB uncertainty if enabled."""
+        # Start with base losses (includes eikonal etc.)
         loss_dict = super().get_loss_dict(outputs, batch, metrics_dict)
 
-        # Semantic loss
-        loss_dict["semantics_loss"] = self.config.semantic_loss_mult * self.semantic_loss(
-            outputs["semantics"], batch["semantics"][..., 0].long().to(self.device)
-        )
+        if self.config.use_rgb_uncertainty and "rgb_uncertainty" in outputs:
+            image = batch["image"].to(self.device)
+            # Blend background same way as base (reuse renderer method)
+            pred_image, gt_image = self.renderer_rgb.blend_background_for_loss_computation(
+                pred_image=outputs["rgb"],
+                pred_accumulation=outputs["accumulation"],
+                gt_image=image,
+            )
+            logvar = outputs["rgb_uncertainty"]  # [R,3]
+            # Heteroscedastic Gaussian negative log-likelihood (up to constant)
+            err2 = (gt_image - pred_image) ** 2
+            # Clamp logvar for stability
+            logvar_clamped = torch.clamp(logvar, min=-4.0, max=8.0)
+            rgb_uncertainty_loss = (
+                err2 / torch.exp(logvar_clamped) + logvar_clamped
+            ).mean() * self.config.rgb_uncertainty_loss_mult
+            # Replace standard rgb_loss
+            loss_dict["rgb_loss_uncertainty"] = rgb_uncertainty_loss
+            loss_dict["rgb_loss"] = rgb_uncertainty_loss
 
-        # RGB uncertainty NLL loss - single channel
-        gt_rgb = batch["image"].to(self.device)
-        pred_rgb = outputs["rgb"]
-        
-        # RGB error (squared L2 distance)
-        rgb_error = torch.sum((pred_rgb - gt_rgb) ** 2, dim=-1)  # [H, W]
-        
-        # numerical stability（ActiveNerfacto）
-        uncert = torch.maximum(
-            outputs["rendered_rgb_uncertainty"].squeeze(-1),
-            torch.tensor(self.config.rgb_beta_min, device=self.device)
-        )
-        
-        # NLL loss：ActiveNeRF(10)
-        loss_dict["rgb_uncertainty_nll_loss"] = self.config.rgb_uncertainty_loss_mult * torch.mean(
-            (1 / (2 * uncert)) * rgb_error + 0.5 * torch.log(uncert)
-        )
-
-        # Density regularization（ActiveNerfacto）
-        if "density" in outputs:
-            density_reg = torch.mean(outputs["density"])
-            loss_dict["density_reg_loss"] = self.config.density_loss_mult * density_reg
-
-            
-        # #semantic uncertainty NLL loss
-        # gt_semantics = batch["semantics"][..., 0].long().to(self.device)
-        # pred_semantics_logits = outputs["semantics"]
-        # semantic_probs = torch.nn.functional.softmax(pred_semantics_logits, dim=-1)
-        # get_one_hot = torch.nn.functional.one_hot(gt_semantics,num_classes=semantic_probs.shape[-1])
-        # semantic_error = torch.mean((semantic_probs - get_one_hot.float())**2, dim=-1)
-
-        # uncert = torch.maximum(outputs["rendered_semantic_uncertainty"].squeeze(-1),
-        #                        torch.tensor(self.config.rendered_uncertainty_eps,device=self.device))
-        
-        # loss_dict["semantic_uncertainty_nll_loss"] = torch.mean(
-        #     0.5 * torch.log(uncert) + 0.5 * semantic_error / uncert
-        # )
+        # # Semantic loss (still disabled)
+        # if "semantics" in outputs and "semantics" in batch:
+        #     loss_dict["semantics_loss"] = self.config.semantic_loss_mult * self.semantic_loss(
+        #         outputs["semantics"], batch["semantics"][..., 0].long().to(self.device)
+        #     )
 
         return loss_dict
 
     def get_image_metrics_and_images(
         self, outputs: Dict[str, Any], batch: Dict[str, Any]
     ) -> Tuple[Dict[str, float], Dict[str, torch.Tensor]]:
-        """Compute image metrics and images from the `outputs` of the model and
-        the `batch` which contains input and ground truth data."""
+        """Add visualization for RGB uncertainty (mean log-variance) if available."""
         metrics_dict, images_dict = super().get_image_metrics_and_images(outputs, batch)
 
-        # semantics
-        semantic_labels = torch.argmax(
-            torch.nn.functional.softmax(outputs["semantics"], dim=-1), dim=-1
-        )
-        images_dict["semantics_colormap"] = self.colormap.to(self.device)[
-            semantic_labels
-        ]
-
-        # RGB uncertainty visualization
-        rgb_std = outputs["rendered_rgb_std"]
-        rgb_uncertainty_colormap = colormaps.apply_colormap(rgb_std)
-        images_dict["rgb_uncertainty_colormap"] = rgb_uncertainty_colormap
-
-        # Add RGB uncertainty to metrics
-        metrics_dict["rgb_uncertainty_mean"] = torch.mean(outputs["rendered_rgb_uncertainty"]).item()
-        metrics_dict["rgb_uncertainty_std"] = torch.std(outputs["rendered_rgb_uncertainty"]).item()
-        
-        
-        # # semantic uncertainty
-        # semantic_std = outputs["rendered_semantic_std"]
-        # semantic_uncertainty_colormap = colormaps.apply_colormap(semantic_std)
-        # images_dict["semantic_uncertainty_colormap"] = semantic_uncertainty_colormap
+        if self.config.use_rgb_uncertainty and ("rgb_uncertainty_var" in outputs or "rgb_uncertainty" in outputs):
+            # Prefer already-computed variance
+            var_map = outputs.get("rgb_uncertainty_var", torch.exp(outputs["rgb_uncertainty"]))  # [R,3]
+            mean_var = var_map.mean(dim=-1, keepdim=True).view(-1,1)
+            # Reshape to image grid heuristically: batch already arranged as [H,W,C] inside renderer outputs
+            # reference = images_dict["img"]  # [B,H,W,C] or [H,W,C]
+            # if reference.ndim == 4:
+            #     _, H_cat, W, C = reference.shape
+            # elif reference.ndim == 3:
+            #     H_cat, W, C = reference.shape
+            # For safety just reshape using number of rays from outputs['rgb']
+            rgb_pred = outputs["rgb"]  # [H,W,3]
+            H, Wp, _ = rgb_pred.shape
+            # mean_var_img = mean_var.view(H, Wp)
+            mean_var_colormap = colormaps.apply_colormap(mean_var).view(H, Wp, 3)
+            # if mean_var_colormap.ndim == 2:
+            #     mean_var_colormap = mean_var_colormap.unsqueeze(-1).repeat(1, 1, 3)
+            
+            images_dict["rgb_uncertainty_var"] = mean_var_colormap
 
         return metrics_dict, images_dict

@@ -18,12 +18,12 @@ class TrainingConfig:
 
     model_type: str = "semantic-sdf"
     """What NeRF model to train. Defaults to NeuS"""
-    experiment_name: str = "neus_train"
+    experiment_name: str = "neus-rgb-uncer-noise-exp1-01"
     """Name of the model to train"""
     output_dir: Path = "./outputs"
     """Where to save the model and outputs"""
     max_num_iterations: int = 100001
-    data: Path = "./inputs"
+    data: Path = "buildnet3d/data/REAL/EXP1"
     """Where to find the input data """
     load_config: Optional[Path] = None
     load_dir: Optional[Path] = None

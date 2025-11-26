@@ -1,6 +1,3 @@
-# semantic_sdf_field.py
-
-
 """
 Field for semantic-SDF, rather then estimating density to generate a surface,
 a signed distance function (SDF) for surface representation is used to help with
@@ -8,67 +5,40 @@ extracting high fidelity surfaces, in addition with a 3D semantic segmentation.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Tuple, Type
+from typing import Dict, Optional, Type
 
 import torch
 from jaxtyping import Float
 from nerfstudio.cameras.rays import RaySamples
 from nerfstudio.field_components.field_heads import FieldHeadNames, SemanticFieldHead
-from nerfstudio.field_components.base_field_component import FieldComponent
 from nerfstudio.field_components.mlp import MLP
 from nerfstudio.field_components.spatial_distortions import SpatialDistortion
 from nerfstudio.fields.sdf_field import SDFField, SDFFieldConfig
 from torch import Tensor, nn
 
-# class SementicUncertaintyFieldHead(FieldComponent):
-#     """Field head for semantic uncertainty (variance). Applies a Softplus activation.
-
-#     This head expects as input the concatenated semantic outputs from the semantic MLP
-#     (num_semantic_classes + 1), and returns a single-channel uncertainty derived from
-#     the last channel via Softplus (plus a small beta_min for numerical stability).
-
-#     Args:
-#         in_dim: Input dimension to the field head.
-#         beta_min: Minimum uncertainty added after activation.
-#         activation: Optional override for activation (defaults to Softplus).
-#     """
-
-#     def __init__(
-#         self, in_dim: int, beta_min: float = 0.01, activation: Optional[nn.Module] = None
-#     ) -> None:
-#         super().__init__(in_dim=in_dim, out_dim=1)
-#         # Softplus by default to ensure positive uncertainty
-#         self.activation = activation if activation is not None else nn.Softplus()
-#         self.beta_min = 0.0 if activation is not None else beta_min
-
-#     def forward(self, in_tensor: Tensor) -> Tensor:
-#         """Processes the input tensor to produce semantic uncertainty.
-
-#         Expects in_tensor shape [..., in_dim], where the last channel encodes the
-#         uncertainty logit. Returns a tensor of shape [..., 1].
-#         """
-#         return self.activation(in_tensor[..., -1:]) + self.beta_min
-    
-
 
 @dataclass
 class SemanticSDFFieldConfig(SDFFieldConfig):
-    """Semantic-SDF Field Config with RGB uncertainty"""
+    """Semantic-SDF Field Config
+
+    Added RGB uncertainty head configuration so that we can model
+    heteroscedastic (per-ray) photometric uncertainty.
+    """
 
     _target: Type = field(default_factory=lambda: SemanticSDFField)
-    num_semantic_classes: int = 5   # Number of classes in the segmentation
-    """Number of classes in the segmentation"""
-    semantic_mlp_number_layers: int = 2
-    """Number of layers for the semantic neural network"""
-    semantic_mlp_layer_width: int = 128
-    """Numbers of neurons in one layer of the semantic MLP"""
-    # semantic_beta_min: float = 0.01
-    # """Minimum value for semantic uncertainty."""
-    rgb_uncertainty_mlp_number_layers: int = 2
-    """Number of layers for RGB uncertainty MLP"""
-    rgb_uncertainty_mlp_layer_width: int = 64
-    """Width of layers for RGB uncertainty MLP"""
-
+    # Semantic (currently disabled / commented out)
+    # num_semantic_classes: int = 6
+    # semantic_mlp_number_layers: int = 2
+    # semantic_mlp_layer_width: int = 128
+    # """Numbers of neurons in one layer of the semantic MLP"""
+    
+    # RGB uncertainty settings
+    use_rgb_uncertainty: bool = True
+    """Whether to predict per-sample RGB log-variance (heteroscedastic uncertainty)."""
+    rgb_uncertainty_mlp_layers: int = 2
+    """Number of hidden layers for RGB uncertainty MLP."""
+    rgb_uncertainty_mlp_width: int = 64
+    """Width of hidden layers for RGB uncertainty MLP."""
 
 class SemanticSDFField(SDFField):
     """
@@ -100,61 +70,32 @@ class SemanticSDFField(SDFField):
             spatial_distortion,
         )
 
-        self.num_semantic_classes = self.config.num_semantic_classes
-
-        self.mlp_semantic = MLP(
-            in_dim=self.config.geo_feat_dim,
-            layer_width=self.config.semantic_mlp_layer_width,
-            num_layers=self.config.semantic_mlp_number_layers,
-            out_dim=self.config.num_semantic_classes, 
-            activation=nn.ReLU(),
-            out_activation=None,   # uncertainty will be handled in the head
-        )
-        
-        # RGB uncertainty MLP - predicts variance for single channel
-        self.mlp_rgb_uncertainty = MLP(
-            in_dim=self.config.geo_feat_dim,
-            layer_width=self.config.rgb_uncertainty_mlp_layer_width,
-            num_layers=self.config.rgb_uncertainty_mlp_number_layers,
-            out_dim=1,  # 单通道方差（标量）
-            activation=nn.ReLU(),
-            out_activation=nn.Softplus(),  # 确保方差为正
-        )
-
-
-        # semantic head
-        self.field_head_semantic = SemanticFieldHead(
-            in_dim=self.mlp_semantic.get_out_dim(),
-            num_classes=self.num_semantic_classes,
-        )
-
-        # self.field_head_semantic_uncertainty = SementicUncertaintyFieldHead(
-        #     in_dim=self.mlp_semantic.get_out_dim(),
-        #     beta_min=self.config.semantic_beta_min
+        # self.num_semantic_classes = self.config.num_semantic_classes
+        # self.mlp_semantic = MLP(
+        #     in_dim=self.config.geo_feat_dim,
+        #     layer_width=self.config.semantic_mlp_layer_width,
+        #     num_layers=self.config.semantic_mlp_number_layers,
+        #     activation=nn.ReLU(),
+        #     out_activation=nn.ReLU(),
         # )
-        
-        
-    # def get_colors(
-    #     self,
-    #     points: Tensor,
-    #     directions: Tensor,
-    #     gradients: Tensor,
-    #     geo_feature: Tensor,
-    #     camera_indices: Tensor,
-    # ) -> Tuple[Tensor, Tensor]:
-    #     """Get RGB colors and uncertainties with uncertainty estimation."""
-    #     # Get base RGB color
-    #     rgb = super().get_colors(
-    #         points, directions, gradients, geo_feature, camera_indices
-    #     )
-        
-    #     # Get RGB uncertainty (variance) from geo features
-    #     rgb_uncertainty = self.mlp_rgb_uncertainty(geo_feature)
-        
-    #     return rgb, rgb_uncertainty
-    
-    
-        
+        # self.field_head_semantic = SemanticFieldHead(
+        #     in_dim=self.mlp_semantic.get_out_dim(),
+        #     num_classes=self.num_semantic_classes,
+        # )
+
+        # RGB uncertainty head (predict log-variance for each RGB channel)
+        if self.config.use_rgb_uncertainty:
+            self.mlp_rgb_uncertainty = MLP(
+                in_dim=self.config.geo_feat_dim,
+                layer_width=self.config.rgb_uncertainty_mlp_width,
+                num_layers=self.config.rgb_uncertainty_mlp_layers,
+                activation=nn.ReLU(),
+                out_activation=None,
+            )
+            self.rgb_uncertainty_out = nn.Linear(
+                self.mlp_rgb_uncertainty.get_out_dim(), 3
+            )  # 3-channel log variance (per RGB)
+
     def get_outputs(
         self,
         ray_samples: RaySamples,
@@ -195,38 +136,42 @@ class SemanticSDFField(SDFField):
             only_inputs=True,
         )[0]
 
-        rgb = super().get_colors(
+        rgb = self.get_colors(
             inputs, directions_flat, gradients, geo_feature, camera_indices
         )
-        rgb_uncertainty = self.mlp_rgb_uncertainty(geo_feature)  # [num_points, 1]
 
+        # semantics_input = geo_feature.view(-1, self.config.geo_feat_dim)
+        # semantics_output = self.mlp_semantic(semantics_input)
+        # semantics = self.field_head_semantic(semantics_output)
 
-        # semantic outputs
-        semantics_input = geo_feature.view(-1, self.config.geo_feat_dim)
-        semantics_output = self.mlp_semantic(semantics_input)
-        # Pass the full semantic MLP output to the semantic head, which projects to num_classes
-        semantics = self.field_head_semantic(semantics_output)
-        # semantic_uncertainty = self.field_head_semantic_uncertainty(semantics_output)
+        # RGB uncertainty (per sample) - predict log variance so it's unconstrained
+        if self.config.use_rgb_uncertainty:
+            uncertainty_input = geo_feature.view(-1, self.config.geo_feat_dim)
+            u_feat = self.mlp_rgb_uncertainty(uncertainty_input)
+            rgb_logvar = self.rgb_uncertainty_out(u_feat)
+        else:
+            rgb_logvar = None
 
         rgb = rgb.view(*ray_samples.frustums.directions.shape[:-1], -1)
-        rgb_uncertainty = rgb_uncertainty.view(*ray_samples.frustums.directions.shape[:-1], -1)  # [..., 1]
         sdf = sdf.view(*ray_samples.frustums.directions.shape[:-1], -1)
         gradients = gradients.view(*ray_samples.frustums.directions.shape[:-1], -1)
         normals = torch.nn.functional.normalize(gradients, p=2, dim=-1)
-        semantics = semantics.view(*ray_samples.frustums.directions.shape[:-1], -1)
+        # semantics = semantics.view(*ray_samples.frustums.directions.shape[:-1], -1)
+        if rgb_logvar is not None:
+            rgb_logvar = rgb_logvar.view(*ray_samples.frustums.directions.shape[:-1], -1)
 
         outputs.update(
             {
                 FieldHeadNames.RGB: rgb,
-                FieldHeadNames.RGB_UNCERTAINTY: rgb_uncertainty,
                 FieldHeadNames.SDF: sdf,
                 FieldHeadNames.NORMALS: normals,
                 FieldHeadNames.GRADIENT: gradients,
-                FieldHeadNames.SEMANTICS: semantics,
-                # "semantic_uncertainty": semantic_uncertainty,
-                
+                # FieldHeadNames.SEMANTICS: semantics,
             }
         )
+        if rgb_logvar is not None:
+            # Custom key (not in FieldHeadNames) for per-sample RGB log variance
+            outputs["rgb_uncertainty"] = rgb_logvar
 
         if return_alphas:
             alphas = self.get_alpha(ray_samples, sdf, gradients)

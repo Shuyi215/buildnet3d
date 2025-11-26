@@ -24,6 +24,8 @@ class BuildNetDataParserConfig(DataParserConfig):
     """Target class to instantiate"""
     data: Path = Path("data/buildnet")
     """Directory specifying location of data."""
+    meta_json_filename: str = "meta_data.json"
+    """Name of the json file containing metadata about the dataset."""
     include_mono_prior: bool = False
     """whether or not to load monocular depth and normal."""
     depth_unit_scale_factor: float = 1e-3
@@ -54,7 +56,7 @@ class BuildNet(DataParser):
         if self.config.data.suffix == ".json":
             meta = load_from_json(self.config.data)
         else:
-            meta = load_from_json(self.config.data / "meta_data.json")
+            meta = load_from_json(self.config.data / self.config.meta_json_filename)
 
         use_mono_prior: bool = (
             "has_mono_prior" in meta.keys() and meta["has_mono_prior"] is True
