@@ -168,9 +168,9 @@ SemanticSDFTrackConfig = TrainerConfig(
     ),
     optimizers={
         "fields": {
-            "optimizer": AdamOptimizerConfig(lr=5e-4, eps=1e-15),
+            "optimizer": AdamOptimizerConfig(lr=5e-4, eps=1e-15, max_norm=1.0),
             "scheduler": CosineDecaySchedulerConfig(
-                warm_up_end=5000, learning_rate_alpha=0.01, max_steps=300001, max_norm=1.0
+                warm_up_end=5000, learning_rate_alpha=0.01, max_steps=300001
             ),
         },
         "field_background": {
@@ -178,11 +178,11 @@ SemanticSDFTrackConfig = TrainerConfig(
             "scheduler": CosineDecaySchedulerConfig(
                 warm_up_end=5000, learning_rate_alpha=0.01, max_steps=300001
             ),
+        },
         "camera_opt": {
             "mode": "off",
             "optimizer": AdamOptimizerConfig(lr=1e-3, eps=1e-15),
             "scheduler": ExponentialDecaySchedulerConfig(lr_final=1e-4, max_steps=10000),
-        },
         },
     },
     viewer=ViewerConfig(num_rays_per_chunk=1 << 12),
