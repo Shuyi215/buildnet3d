@@ -39,7 +39,7 @@ class SemanticSDFFieldConfig(SDFFieldConfig):
     """Number of hidden layers for RGB uncertainty MLP."""
     rgb_uncertainty_mlp_width: int = 64
     """Width of hidden layers for RGB uncertainty MLP."""
-    rgb_beta_min: float = 0.0001
+    rgb_beta_min: float = 0.001
     """Minimum beta value for RGB uncertainty log value."""
     
     # semantic uncertainty settings
@@ -49,7 +49,7 @@ class SemanticSDFFieldConfig(SDFFieldConfig):
     """Number of hidden layers for semantic uncertainty MLP."""
     semantic_uncertainty_mlp_width: int = 64
     """Width of hidden layers for semantic uncertainty MLP."""
-    semantic_beta_min: float = 0.0001
+    semantic_beta_min: float = 0.001
     """Minimum beta value for semantic uncertainty log value."""
 
 class SemanticSDFField(SDFField):

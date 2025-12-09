@@ -27,17 +27,15 @@ class SemanticSDFModelConfig(NeuSModelConfig):
     """
 
     _target: Type = field(default_factory=lambda: SemanticSDFModel)
-    eikonal_loss_mult: float = 5
+    eikonal_loss_mult: float = 0.1
     """Factor that multiplies the eikonal loss"""
-    fg_loss_mult: float = 0.1
+    fg_loss_mult: float = 0.01
     """Factor that multiplies the foreground loss"""
     
     use_semantic: bool = True
     """Whether to use semantic segmentation."""
     semantic_loss_mult: float = 1.0
     """Factor that multiplies the semantic loss"""
-    eikonal_loss_mult: float = 0.1
-    """Factor that multiplies the eikonal loss"""
     fg_loss_mult: float = 0.01
     """Factor that multiplies the foreground loss"""
     rgb_uncertainty_loss_mult: float = 1.0
@@ -219,7 +217,7 @@ class SemanticSDFModel(NeuSModel):
             err2 = (gt_image - pred_image) ** 2
             rgb_uncertainty_loss = (
                 err2 / torch.exp(rgb_logvar) + rgb_logvar
-            ).mean() * self.config.rgb_uncertainty_loss_mult
+            ).mean() * self.config.rgb_uncertainty_loss_mult + 7.0
             # Replace standard rgb_loss
             loss_dict["rgb_loss_uncertainty"] = rgb_uncertainty_loss
             # loss_dict["rgb_loss"] = rgb_uncertainty_loss

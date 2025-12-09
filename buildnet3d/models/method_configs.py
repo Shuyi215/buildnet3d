@@ -170,7 +170,7 @@ SemanticSDFTrackConfig = TrainerConfig(
         "fields": {
             "optimizer": AdamOptimizerConfig(lr=5e-4, eps=1e-15),
             "scheduler": CosineDecaySchedulerConfig(
-                warm_up_end=5000, learning_rate_alpha=0.01, max_steps=300001
+                warm_up_end=5000, learning_rate_alpha=0.01, max_steps=300001, max_norm=1.0
             ),
         },
         "field_background": {
