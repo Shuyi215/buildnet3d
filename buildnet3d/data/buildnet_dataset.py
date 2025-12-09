@@ -55,6 +55,6 @@ class BuildNetDataset(InputDataset):
             mask *= data["mask"].type(torch.float32)   # merge with mask from dataparser
 
         return {"semantics": semantic_label, 
-                "mask": torch.ones((H, W, 1), dtype=torch.float32),
+                "mask": mask.view(H, W, 1),
                 "fg_mask": mask,
                 } 

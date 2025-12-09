@@ -206,6 +206,7 @@ class SemanticSDFModel(NeuSModel):
         # RGB loss with uncertainty
         if self.config.use_rgb_uncertainty and "rgb_uncertainty" in outputs:
             image = batch["image"].to(self.device)
+            mask = batch["mask"].to(self.device)
             # Blend background same way as base (reuse renderer method)
             pred_image, gt_image = self.renderer_rgb.blend_background_for_loss_computation(
                 pred_image=outputs["rgb"],
@@ -215,13 +216,9 @@ class SemanticSDFModel(NeuSModel):
             rgb_logvar = outputs["rgb_uncertainty"]  # [R,3]
             # Heteroscedastic Gaussian negative log-likelihood (up to constant)
             err2 = (gt_image - pred_image) ** 2
-            rgb_uncertainty_loss = (
-                err2 / torch.exp(rgb_logvar) + rgb_logvar
-            ).mean() * self.config.rgb_uncertainty_loss_mult + 7.0
-            # Replace standard rgb_loss
+            loss_map = err2 / torch.exp(rgb_logvar) + rgb_logvar
+            rgb_uncertainty_loss = (loss_map * mask).sum() / (mask.sum() + 1e-6) * self.config.rgb_uncertainty_loss_mult + 7.0
             loss_dict["rgb_loss_uncertainty"] = rgb_uncertainty_loss
-            # loss_dict["rgb_loss"] = rgb_uncertainty_loss
-            loss_dict["rgb_loss"] = self.rgb_loss(pred_image, gt_image)  
 
 
         # prepare for semantic loss(gt and mask)
@@ -292,10 +289,14 @@ class SemanticSDFModel(NeuSModel):
         # Semantic Uncertainty
         if self.config.use_semantic_uncertainty and ("semantic_uncertainty_var" in outputs):
             sem_var_map = outputs.get("semantic_uncertainty_var", torch.exp(outputs["semantic_uncertainty"]))  # [R,C]
+            # normalize across classes
             mean_sem_var = sem_var_map.mean(dim=-1, keepdim=True).view(-1,1)
+            v_min = mean_sem_var.min()
+            v_max = mean_sem_var.max()
+            mean_sem_var_norm = (mean_sem_var - v_min) / (v_max - v_min + 1e-8)
             rgb_pred = outputs["rgb"]  # [H,W,3]
             H, Wp, _ = rgb_pred.shape
-            mean_sem_var_colormap = colormaps.apply_colormap(mean_sem_var).view(H, Wp, 3)
+            mean_sem_var_colormap = colormaps.apply_colormap(mean_sem_var_norm).view(H, Wp, 3)
             images_dict["semantic_uncertainty_var"] = mean_sem_var_colormap
 
         return metrics_dict, images_dict

@@ -18,6 +18,7 @@ from nerfstudio.models.neus import NeuSModelConfig
 from nerfstudio.fields.sdf_field import SDFFieldConfig
 from nerfstudio.engine.trainer import TrainerConfig
 from nerfstudio.pipelines.base_pipeline import VanillaPipelineConfig
+from nerfstudio.plugins.types import MethodSpecification
 
 from buildnet3d.data.buildnet_dataset import BuildNetDataset
 from buildnet3d.data.buildnet_dataparser import BuildNetDataParserConfig
@@ -187,4 +188,9 @@ SemanticSDFTrackConfig = TrainerConfig(
     },
     viewer=ViewerConfig(num_rays_per_chunk=1 << 12),
     vis="wandb",
+)
+
+semantic_sdf_method = MethodSpecification(
+    config=SemanticSDFTrackConfig,
+    description="Custom Semantic SDF implementation",
 )

@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "buildnet3d"
+version = "0.0.1"
+description = "My custom semantic SDF method"
+requires-python = ">=3.8"
+dependencies = [
+    "nerfstudio>=1.0.0",
+]
+
+
+[project.entry-points.'nerfstudio.method_configs']
+semantic-sdf = "buildnet3d.models.method_configs:semantic_sdf_method"
+
+[tool.setuptools.packages.find]
+include = ["buildnet3d*"]
