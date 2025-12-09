@@ -23,17 +23,14 @@ from nerfstudio.utils.rich_utils import CONSOLE
 @dataclass
 class SemanticSDFModelConfig(NeuSModelConfig):
     """Semantic-SDF Model Config
-
-    Extended with RGB uncertainty support. The uncertainty is modeled as a
-    per-sample log-variance and aggregated along the ray using volume weights.
-    Loss is replaced by a heteroscedastic likelihood when enabled.
+    Extended with RGB uncertainty and semantic uncertainty support. 
     """
 
     _target: Type = field(default_factory=lambda: SemanticSDFModel)
     eikonal_loss_mult: float = 5
     """Factor that multiplies the eikonal loss"""
-    # fg_loss_mult: float = 0.1
-    # """Factor that multiplies the foreground loss"""
+    fg_loss_mult: float = 0.1
+    """Factor that multiplies the foreground loss"""
     
     use_semantic: bool = True
     """Whether to use semantic segmentation."""
@@ -229,10 +226,18 @@ class SemanticSDFModel(NeuSModel):
             loss_dict["rgb_loss"] = self.rgb_loss(pred_image, gt_image)  
 
 
+        # prepare for semantic loss(gt and mask)
+        if "semantics" in batch:
+            gt_semantics = batch["semantics"][..., 0].long().to(self.device)
+            bg_semantic_id = 0
+            valid_mask = gt_semantics != bg_semantic_id  # ignore background pixels
+            masked_gt_sem = gt_semantics[valid_mask]
+            
         # Semantic loss
-        if self.config.use_semantic and "semantics" in outputs and "semantics" in batch:
+        if self.config.use_semantic and "semantics" in outputs and "semantics" in batch and not self.config.use_semantic_uncertainty:
+            masked_pred_sem = outputs["semantics"][valid_mask]
             loss_dict["semantics_loss"] = self.config.semantic_loss_mult * self.semantic_loss_1(
-                outputs["semantics"], batch["semantics"][..., 0].long().to(self.device)
+                masked_pred_sem, masked_gt_sem
             )
         
         
@@ -240,22 +245,25 @@ class SemanticSDFModel(NeuSModel):
         if self.config.use_semantic_uncertainty and "semantic_uncertainty" in outputs:
             if step <= self.config.semantic_uncertainty_delay_steps:
                 if "semantics" in outputs and "semantics" in batch:
+                    masked_pred_sem = outputs["semantics"][valid_mask]
                     loss_dict["semantics_loss"] = self.config.semantic_loss_mult * self.semantic_loss_1(
-                        outputs["semantics"], batch["semantics"][..., 0].long().to(self.device)
+                        masked_pred_sem, masked_gt_sem
                     )
             
             else:  
+                masked_logits = outputs["semantics"][valid_mask]
+                masked_logvar = outputs["semantic_uncertainty"][valid_mask]
                 # Reparameterization trick
-                sum_prob = torch.zeros_like(outputs["semantics"])
+                sum_prob = torch.zeros_like(masked_logits)
                 for i in range(self.config.N_reparam_samples):
-                    noise = torch.randn_like(outputs["semantics"])
-                    sample_logit = outputs["semantics"] + noise * torch.exp(0.5 * outputs["semantic_uncertainty"])
+                    noise = torch.randn_like(masked_logits)
+                    sample_logit = masked_logits + noise * torch.exp(0.5 * masked_logvar)
                     sample_prob = torch.softmax(sample_logit, dim=-1)
                     sum_prob += sample_prob
                 avg_prob = sum_prob / self.config.N_reparam_samples
                 avg_log_prob = torch.log(avg_prob + 1e-8)  # avoid log(0)
                 loss_dict["semantics_loss"] = self.config.semantic_loss_mult * self.semantic_loss_2(
-                    avg_log_prob, batch["semantics"][..., 0].long().to(self.device)
+                    avg_log_prob, masked_gt_sem  
                 )
                     
         return loss_dict
