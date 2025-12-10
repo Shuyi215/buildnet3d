@@ -29,8 +29,8 @@ class SemanticSDFModelConfig(NeuSModelConfig):
     _target: Type = field(default_factory=lambda: SemanticSDFModel)
     # eikonal_loss_mult: float = 0.1
     # """Factor that multiplies the eikonal loss"""
-    # fg_loss_mult: float = 0.01
-    # """Factor that multiplies the foreground loss"""
+    fg_loss_relat_mult: float = 1.0
+    """Factor that multiplies the foreground loss"""
     
     use_semantic: bool = True
     """Whether to use semantic segmentation."""
@@ -197,9 +197,9 @@ class SemanticSDFModel(NeuSModel):
         loss_dict = super().get_loss_dict(outputs, batch, metrics_dict)
 
 
-        # # increase weight of eikonal loss
-        # if "eikonal_loss" in loss_dict:
-        #     loss_dict["eikonal_loss"] = self.config.eikonal_loss_mult * loss_dict["eikonal_loss"]
+        # increase weight of fg_mask loss
+        if "fg_mask_loss" in loss_dict:
+            loss_dict["fg_mask_loss"] = self.config.fg_loss_relat_mult * loss_dict["fg_mask_loss"]
         
         # RGB loss with uncertainty
         if self.config.use_rgb_uncertainty and "rgb_uncertainty" in outputs:
