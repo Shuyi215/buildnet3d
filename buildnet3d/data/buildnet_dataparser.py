@@ -24,6 +24,8 @@ class BuildNetDataParserConfig(DataParserConfig):
     """Target class to instantiate"""
     data: Path = Path("data/buildnet")
     """Directory specifying location of data."""
+    meta_rgb_path: str = "images"
+    """Path to RGB images folder."""
     meta_json_filename: str = "meta_data.json"
     """Name of the json file containing metadata about the dataset."""
     include_mono_prior: bool = False
@@ -73,7 +75,7 @@ class BuildNet(DataParser):
         cy = []
         camera_to_worlds = []
         for frame in meta["frames"]:
-            image_filenames.append(self.config.data / "images"  / frame["rgb_path"])
+            image_filenames.append(self.config.data / self.config.meta_rgb_path / frame["rgb_path"])
             segmentation_filenames.append(self.config.data / "semantic" / frame["segmentation_path"])
             # sensor_depth_filenames.append(self.config.data / "depths"  / frame["rgb_path"].replace(".png", "_depth.png"))
             if use_mono_prior:
@@ -141,7 +143,7 @@ class BuildNet(DataParser):
             filenames=segmentation_filenames,
             classes=classes,
             colors=colors,
-            mask_classes=[]
+            mask_classes=['0']  # assuming class 0 is background
         )
 
         dataparser_outputs = DataparserOutputs(

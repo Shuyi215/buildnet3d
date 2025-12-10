@@ -40,21 +40,21 @@ class BuildNetDataset(InputDataset):
             scale_factor=self.scale_factor,
         )
         mask = mask.type(torch.float32)
-        H, W = semantic_label.shape[:2]
+        # H, W = semantic_label.shape[:2]
         
-        # Inputdataset overlooked alpha channel. load again to get RGBA data
-        raw_image = self.get_numpy_image(data["image_idx"]) 
+        # # Inputdataset overlooked alpha channel. load again to get RGBA data
+        # raw_image = self.get_numpy_image(data["image_idx"]) 
     
-        if raw_image.shape[-1] == 4:
-            # extract Alpha as Mask (0 for background, 1 for foreground)
-            alpha_mask = torch.from_numpy(raw_image[..., 3:4].astype("float32") / 255.0)
-            # binarize alpha mask
-            mask *= alpha_mask   # merge alpha with semantic mask
+        # if raw_image.shape[-1] == 4:
+        #     # extract Alpha as Mask (0 for background, 1 for foreground)
+        #     alpha_mask = torch.from_numpy(raw_image[..., 3:4].astype("float32") / 255.0)
+        #     # binarize alpha mask
+        #     mask *= alpha_mask   # merge alpha with semantic mask
         
-        if "mask" in data:
-            mask *= data["mask"].type(torch.float32)   # merge with mask from dataparser
+        # if "mask" in data:
+        #     mask *= data["mask"].type(torch.float32)   # merge with mask from dataparser
 
         return {"semantics": semantic_label, 
-                "mask": mask.view(H, W, 1),
+                "mask": mask,
                 "fg_mask": mask,
                 } 

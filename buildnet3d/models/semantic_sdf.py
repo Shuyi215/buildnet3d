@@ -36,8 +36,6 @@ class SemanticSDFModelConfig(NeuSModelConfig):
     """Whether to use semantic segmentation."""
     semantic_loss_mult: float = 1.0
     """Factor that multiplies the semantic loss"""
-    fg_loss_mult: float = 0.01
-    """Factor that multiplies the foreground loss"""
     rgb_uncertainty_loss_mult: float = 1.0
     """Global multiplier for the uncertainty-weighted RGB loss."""
     use_rgb_uncertainty: bool = True
@@ -219,6 +217,7 @@ class SemanticSDFModel(NeuSModel):
             loss_map = err2 / torch.exp(rgb_logvar) + rgb_logvar
             rgb_uncertainty_loss = (loss_map * mask).sum() / (mask.sum() + 1e-6) * self.config.rgb_uncertainty_loss_mult + 7.0
             loss_dict["rgb_loss_uncertainty"] = rgb_uncertainty_loss
+            loss_dict["rgb_loss"] = self.rgb_loss(pred_image,gt_image)
 
 
         # prepare for semantic loss(gt and mask)
