@@ -216,7 +216,7 @@ class SemanticSDFModel(NeuSModel):
             err2 = (gt_image - pred_image) ** 2
             loss_map = err2 / torch.exp(rgb_logvar) + rgb_logvar
             # rgb_uncertainty_loss = (loss_map * mask).sum() / (mask.sum() + 1e-6) * self.config.rgb_uncertainty_loss_mult + 7.0
-            rgb_uncertainty_loss = loss_map.mean() * self.config.rgb_uncertainty_loss_mult
+            rgb_uncertainty_loss = loss_map.mean() * self.config.rgb_uncertainty_loss_mult + 7.0
             loss_dict["rgb_loss_uncertainty"] = rgb_uncertainty_loss
             loss_dict["rgb_loss"] = self.rgb_loss(pred_image,gt_image)
 
