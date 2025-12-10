@@ -27,10 +27,10 @@ class SemanticSDFModelConfig(NeuSModelConfig):
     """
 
     _target: Type = field(default_factory=lambda: SemanticSDFModel)
-    eikonal_loss_mult: float = 0.1
-    """Factor that multiplies the eikonal loss"""
-    fg_loss_mult: float = 0.01
-    """Factor that multiplies the foreground loss"""
+    # eikonal_loss_mult: float = 0.1
+    # """Factor that multiplies the eikonal loss"""
+    # fg_loss_mult: float = 0.01
+    # """Factor that multiplies the foreground loss"""
     
     use_semantic: bool = True
     """Whether to use semantic segmentation."""
@@ -204,7 +204,7 @@ class SemanticSDFModel(NeuSModel):
         # RGB loss with uncertainty
         if self.config.use_rgb_uncertainty and "rgb_uncertainty" in outputs:
             image = batch["image"].to(self.device)
-            mask = batch["mask"].to(self.device)
+            mask = batch["fg_mask"].to(self.device)
             # Blend background same way as base (reuse renderer method)
             pred_image, gt_image = self.renderer_rgb.blend_background_for_loss_computation(
                 pred_image=outputs["rgb"],
@@ -215,7 +215,8 @@ class SemanticSDFModel(NeuSModel):
             # Heteroscedastic Gaussian negative log-likelihood (up to constant)
             err2 = (gt_image - pred_image) ** 2
             loss_map = err2 / torch.exp(rgb_logvar) + rgb_logvar
-            rgb_uncertainty_loss = (loss_map * mask).sum() / (mask.sum() + 1e-6) * self.config.rgb_uncertainty_loss_mult + 7.0
+            # rgb_uncertainty_loss = (loss_map * mask).sum() / (mask.sum() + 1e-6) * self.config.rgb_uncertainty_loss_mult + 7.0
+            rgb_uncertainty_loss = loss_map.mean() * self.config.rgb_uncertainty_loss_mult
             loss_dict["rgb_loss_uncertainty"] = rgb_uncertainty_loss
             loss_dict["rgb_loss"] = self.rgb_loss(pred_image,gt_image)
 
