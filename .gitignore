@@ -3,3 +3,9 @@ outputs/
 bproc_generator/data/example
 buildnet3d/data/REAL
 buildnet3d/data/BuildNet3D
+buildnet3d/data/add_light_noise.py
+buildnet3d/data/add_pose_noise.py
+buildnet3d/data/analyse_pixels.py
+buildnet3d/data/mapping_mask.py
+buildnet3d.egg-info
+.vscode
