@@ -114,8 +114,8 @@ NeRFactoTrackConfig = TrainerConfig(
 SemanticSDFTrackConfig = TrainerConfig(
     method_name="semantic-sdf",
     steps_per_eval_image=1000,
-    steps_per_eval_batch=5000,
-    steps_per_save=10000,
+    steps_per_eval_batch=500,
+    steps_per_save=5000,
     steps_per_eval_all_images=1000000,
     max_num_iterations=300001,
     save_only_latest_checkpoint= True,
@@ -124,8 +124,8 @@ SemanticSDFTrackConfig = TrainerConfig(
         datamanager=VanillaDataManagerConfig(
             _target=VanillaDataManager[BuildNetDataset],
             dataparser=BuildNetDataParserConfig(),
-            train_num_rays_per_batch=2048,
-            eval_num_rays_per_batch=2048,
+            train_num_rays_per_batch=512,
+            eval_num_rays_per_batch=256,
         ),
         model=SemanticSDFModelConfig(
             near_plane=0.5,
@@ -140,7 +140,7 @@ SemanticSDFTrackConfig = TrainerConfig(
                 inside_outside=False,
             ),
             background_model="none",
-            eval_num_rays_per_chunk=1024,
+            eval_num_rays_per_chunk=256,
             semantic_loss_mult=0.5,
             eikonal_loss_mult=0.1,
         ),
