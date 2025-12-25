@@ -66,6 +66,7 @@ class BuildNet(DataParser):
 
         image_filenames = []
         segmentation_filenames = []
+        mask_filenames = []
         depth_filenames = []
         normal_filenames = []
         transform = None
@@ -77,6 +78,7 @@ class BuildNet(DataParser):
         for frame in meta["frames"]:
             image_filenames.append(self.config.data / self.config.meta_rgb_path / frame["rgb_path"])
             segmentation_filenames.append(self.config.data / "semantic" / frame["segmentation_path"])
+            mask_filenames.append(self.config.data / "masks" / frame["mask_path"])
             # sensor_depth_filenames.append(self.config.data / "depths"  / frame["rgb_path"].replace(".png", "_depth.png"))
             if use_mono_prior:
                 depth_filenames.append(self.config.data / frame["depth_path"])
@@ -144,13 +146,14 @@ class BuildNet(DataParser):
             classes=classes,
             colors=colors,
             # mask_classes=[]
-            mask_classes=['0']  # assuming class 0 is background
+            mask_classes=['0']   # assuming class 0 is background
         )
 
         dataparser_outputs = DataparserOutputs(
             image_filenames=image_filenames,
             cameras=cameras,
             scene_box=scene_box,
+            mask_filenames=mask_filenames if len(mask_filenames) > 0 else None,
             metadata={
                 "transform": transform,
                 "semantics": semantics,

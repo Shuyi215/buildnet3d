@@ -1,3 +1,5 @@
 **/__pycache__/
 outputs/
 bproc_generator/data/example
+buildnet3d/data/REAL
+buildnet3d/data/BuildNet3D
