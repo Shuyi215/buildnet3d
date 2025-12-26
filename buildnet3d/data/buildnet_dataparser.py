@@ -141,7 +141,7 @@ class BuildNet(DataParser):
             filenames=segmentation_filenames,
             classes=classes,
             colors=colors,
-            mask_classes=['0' ],  # background class
+            mask_classes=[], 
         )
 
         dataparser_outputs = DataparserOutputs(

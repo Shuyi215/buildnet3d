@@ -135,7 +135,7 @@ SemanticSDFTrackConfig = TrainerConfig(
                 num_layers=8,
                 num_layers_color=4,
                 hidden_dim=256,
-                bias=0.3,
+                bias=0.5,
                 beta_init=0.2,
                 inside_outside=False,
             ),
