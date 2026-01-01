@@ -140,6 +140,7 @@ SemanticSDFTrackConfig = TrainerConfig(
                 bias=0.5,
                 beta_init=0.2,
                 inside_outside=False,
+                num_semantic_classes=5,
             ),
             background_model="none",
             eval_num_rays_per_chunk=256,

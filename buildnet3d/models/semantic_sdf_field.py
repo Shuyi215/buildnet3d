@@ -28,8 +28,6 @@ class SemanticSDFFieldConfig(SDFFieldConfig):
     """Number of layers for the semantic neural network"""
     semantic_mlp_layer_width: int = 128
     """Numbers of neurons in one layer of the semantic MLP"""
-    bias: float = 0.4
-    """Sphere size of geometric initialization"""
 
 
 class SemanticSDFField(SDFField):
