@@ -39,10 +39,12 @@ class BuildNetDataset(InputDataset):
             mask_indices=self.mask_indices,
             scale_factor=self.scale_factor,
         )
+        mask = mask.type(torch.float32)
         
         if "mask" in data:
             mask &= data["mask"]
 
         return {"semantics": semantic_label, 
-                "mask": mask,
+                "mask": torch.ones_like(mask),
+                "fg_mask": mask,
                 } 

@@ -204,6 +204,7 @@ class SemanticSDFModel(NeuSModel):
         # RGB loss with uncertainty
         if self.config.use_rgb_uncertainty and "rgb_uncertainty" in outputs:
             image = batch["image"].to(self.device)
+            mask = batch["fg_mask"].to(self.device)
             # Blend background same way as base (reuse renderer method)
             pred_image, gt_image = self.renderer_rgb.blend_background_for_loss_computation(
                 pred_image=outputs["rgb"],
