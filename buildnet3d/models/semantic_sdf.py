@@ -276,10 +276,13 @@ class SemanticSDFModel(NeuSModel):
         # RGB Uncertainty
         if self.config.use_rgb_uncertainty and ("rgb_uncertainty_var" in outputs):
             var_map = outputs.get("rgb_uncertainty_var", torch.exp(outputs["rgb_uncertainty"]))  # [R,3]
-            mean_var = var_map.mean(dim=-1, keepdim=True).view(-1,1)
+            mean_rgb_var = var_map.mean(dim=-1, keepdim=True).view(-1,1)
+            rgb_v_min = mean_rgb_var.min()
+            rgb_v_max = mean_rgb_var.max()
+            mean_rgb_var_norm = (mean_rgb_var - rgb_v_min) / (rgb_v_max - rgb_v_min + 1e-8)
             rgb_pred = outputs["rgb"]  # [H,W,3]
             H, Wp, _ = rgb_pred.shape
-            mean_var_colormap = colormaps.apply_colormap(mean_var).view(H, Wp, 3)
+            mean_var_colormap = colormaps.apply_colormap(mean_rgb_var_norm).view(H, Wp, 3)
             images_dict["rgb_uncertainty_var"] = mean_var_colormap
         
         # Semantic Uncertainty
@@ -287,9 +290,9 @@ class SemanticSDFModel(NeuSModel):
             sem_var_map = outputs.get("semantic_uncertainty_var", torch.exp(outputs["semantic_uncertainty"]))  # [R,C]
             # normalize across classes
             mean_sem_var = sem_var_map.mean(dim=-1, keepdim=True).view(-1,1)
-            v_min = mean_sem_var.min()
-            v_max = mean_sem_var.max()
-            mean_sem_var_norm = (mean_sem_var - v_min) / (v_max - v_min + 1e-8)
+            sem_v_min = mean_sem_var.min()
+            sem_v_max = mean_sem_var.max()
+            mean_sem_var_norm = (mean_sem_var - sem_v_min) / (sem_v_max - sem_v_min + 1e-8)
             rgb_pred = outputs["rgb"]  # [H,W,3]
             H, Wp, _ = rgb_pred.shape
             mean_sem_var_colormap = colormaps.apply_colormap(mean_sem_var_norm).view(H, Wp, 3)
