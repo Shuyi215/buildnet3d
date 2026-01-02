@@ -41,8 +41,8 @@ class BuildNetDataset(InputDataset):
         )
         mask = mask.type(torch.float32)
         
-        if "mask" in data:
-            mask &= data["mask"]
+        # if "mask" in data:
+        #     mask &= data["mask"]
 
         return {"semantics": semantic_label, 
                 "mask": torch.ones_like(mask),
