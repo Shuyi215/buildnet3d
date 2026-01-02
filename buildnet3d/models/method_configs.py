@@ -18,6 +18,7 @@ from nerfstudio.models.neus import NeuSModelConfig
 from nerfstudio.fields.sdf_field import SDFFieldConfig
 from nerfstudio.engine.trainer import TrainerConfig
 from nerfstudio.pipelines.base_pipeline import VanillaPipelineConfig
+from nerfstudio.plugins.types import MethodSpecification
 
 from buildnet3d.data.buildnet_dataset import BuildNetDataset
 from buildnet3d.data.buildnet_dataparser import BuildNetDataParserConfig
@@ -115,7 +116,7 @@ NeRFactoTrackConfig = TrainerConfig(
 
 SemanticSDFTrackConfig = TrainerConfig(
     method_name="semantic-sdf",
-    steps_per_eval_image=1500,# default 1500
+    steps_per_eval_image=1000,
     steps_per_eval_batch=500,
     steps_per_save=5000,
     steps_per_eval_all_images=1000000,
@@ -138,13 +139,13 @@ SemanticSDFTrackConfig = TrainerConfig(
                 num_layers=8,
                 num_layers_color=4,
                 hidden_dim=256,
-                bias=0.5,
+                bias=1.2,
                 beta_init=0.2,
                 inside_outside=False,
+                # num_semantic_classes=9,
             ),
             background_model="none",
             eval_num_rays_per_chunk=256,
-            # semantic_loss_mult=0.5,
             eikonal_loss_mult=0.1,
         ),
     ),
@@ -169,4 +170,9 @@ SemanticSDFTrackConfig = TrainerConfig(
     },
     viewer=ViewerConfig(num_rays_per_chunk=1 << 12),
     vis="wandb",
+)
+
+semantic_sdf_method = MethodSpecification(
+    config=SemanticSDFTrackConfig,
+    description="Custom Semantic SDF implementation",
 )
