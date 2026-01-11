@@ -31,6 +31,8 @@ class SemanticSDFFieldConfig(SDFFieldConfig):
     semantic_mlp_number_layers: int = 2
     semantic_mlp_layer_width: int = 128
     """Numbers of neurons in one layer of the semantic MLP"""
+    use_semantics: bool = False
+    """Whether to use semantic segmentation."""
     
     # RGB uncertainty settings
     use_rgb_uncertainty: bool = True
@@ -203,13 +205,14 @@ class SemanticSDFField(SDFField):
                 FieldHeadNames.SDF: sdf,
                 FieldHeadNames.NORMALS: normals,
                 FieldHeadNames.GRADIENT: gradients,
-                FieldHeadNames.SEMANTICS: semantics,
             }
         )
+        if self.config.use_semantics:
+            outputs[FieldHeadNames.SEMANTICS] = semantics
         if rgb_logvar is not None:
-            outputs["rgb_uncertainty"] = rgb_logvar
+            outputs["rgb_uncertainty_logvar"] = rgb_logvar
         if semantic_logvar is not None:
-            outputs["semantic_uncertainty"] = semantic_logvar
+            outputs["semantic_uncertainty_logvar"] = semantic_logvar
 
         if return_alphas:
             alphas = self.get_alpha(ray_samples, sdf, gradients)

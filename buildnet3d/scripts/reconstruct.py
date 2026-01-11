@@ -16,18 +16,19 @@ from buildnet3d.models.method_configs import (
 class TrainingConfig:
     """Configuration for training"""
 
-    model_type: str = "semantic-sdf"
+    model_type: str = "nerfacto"
     """What NeRF model to train. Defaults to NeuS"""
-    experiment_name: str = "neus-rgb-uncer-noise-exp1-01"
+    experiment_name: str = "realistic-2-nerfacto"
     """Name of the model to train"""
     output_dir: Path = "./outputs"
     """Where to save the model and outputs"""
     max_num_iterations: int = 100001
-    data: Path = "buildnet3d/data/REAL/EXP1"
+    data: Path = "buildnet3d/data/BuildNet3D/realistic/building2"
     """Where to find the input data """
     load_config: Optional[Path] = None
     load_dir: Optional[Path] = None
-    
+    # Path("outputs/2.1-0.1-semantic-uncertainty/semantic-sdf/2026-01-10_213757/nerfstudio_models")
+
     use_appearance_embedding: Optional[bool] = False
     use_average_appearance_embedding: Optional[bool] = True
     use_grid_feature: Optional[bool] = True
