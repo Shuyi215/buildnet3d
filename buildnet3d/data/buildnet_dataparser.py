@@ -220,7 +220,7 @@ class BuildNet(DataParser):
                 filenames=segmentation_filenames,
                 classes=classes,
                 colors=colors,
-                mask_classes=[],
+                mask_classes=["0"],
             )
 
         # Helpful log

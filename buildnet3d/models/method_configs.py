@@ -26,6 +26,10 @@ from buildnet3d.data.buildnet_dataparser import BuildNetDataParserConfig
 
 from buildnet3d.models.semantic_sdf import SemanticSDFModelConfig
 from buildnet3d.models.semantic_sdf_field import SemanticSDFFieldConfig
+from buildnet3d.models.uncertainty_semantic_sdf import UncertaintySemanticSDFModelConfig
+from buildnet3d.models.uncertainty_semantic_sdf_field import (
+    UncertaintySemanticSDFFieldConfig,
+)
 
 NeuSTrackConfig = TrainerConfig(
     method_name="neus",
@@ -185,7 +189,7 @@ SemanticSDFTrackConfig = TrainerConfig(
     steps_per_save=5000,
     steps_per_eval_all_images=1000000,
     max_num_iterations=100001,
-    save_only_latest_checkpoint= True,
+    save_only_latest_checkpoint=True,
     mixed_precision=False,
     pipeline=VanillaPipelineConfig(
         datamanager=VanillaDataManagerConfig(
@@ -193,39 +197,118 @@ SemanticSDFTrackConfig = TrainerConfig(
             dataparser=BuildNetDataParserConfig(
                 meta_json_filename="meta_data.json",
                 meta_rgb_path="images",
-                ),
+                split_by_filename=False,
+                skip_every_for_val_split=8,  # n=8 → 每 8 张取 1 张做 eval
+                semantics=True,
+            ),
             train_num_rays_per_batch=512,
             eval_num_rays_per_batch=256,
         ),
         model=SemanticSDFModelConfig(
+            # --- SDF field ---
             sdf_field=SemanticSDFFieldConfig(
                 bias=0.5,
                 beta_init=0.2,
                 inside_outside=False,
                 use_grid_feature=True,
                 use_appearance_embedding=False,
-                num_semantic_classes=5,
-                use_rgb_uncertainty=True,
                 use_semantics=True,
-                use_semantic_uncertainty=True,
-                rgb_beta_min=0.0001,
-                semantic_beta_min=0.0001,
+                num_semantic_classes=5,
             ),
+            # --- rendering ---
             near_plane=0.05,
             far_plane=50.0,
+            overwrite_near_far_plane=False,
             background_model="none",
             background_color="random",
-            overwrite_near_far_plane=False,
             use_average_appearance_embedding=False,
             eval_num_rays_per_chunk=256,
-            semantic_loss_mult=0.5,
-            fg_loss_relat_mult=100,
-            use_rgb_uncertainty_warmup=False,
-            rgb_uncertainty_delay_steps=5000,
-            rgb_uncertainty_loss_mult_warmup=0.1,
-            rgb_uncertainty_loss_mult=0.1,
-            use_rgb_uncertainty=True,
+            # --- foreground ---
+            fg_loss_relat_mult=1000,
+            # --- semantics ---
             use_semantics=True,
+            semantic_loss_mult=0.5,
+        ),
+    ),
+    optimizers={
+        "camera_opt": {
+            "mode": "off",
+            "optimizer": AdamOptimizerConfig(lr=1e-3, eps=1e-15),
+            "scheduler": ExponentialDecaySchedulerConfig(lr_final=1e-4, max_steps=10000),
+        },
+        "fields": {
+            "optimizer": AdamOptimizerConfig(lr=5e-4, eps=1e-15, max_norm=1.0),
+            "scheduler": CosineDecaySchedulerConfig(
+                warm_up_end=5000, learning_rate_alpha=0.01, max_steps=300001
+            ),
+        },
+        "field_background": {
+            "optimizer": AdamOptimizerConfig(lr=5e-4, eps=1e-15),
+            "scheduler": CosineDecaySchedulerConfig(
+                warm_up_end=5000, learning_rate_alpha=0.01, max_steps=300001
+            ),
+        },
+    },
+    viewer=ViewerConfig(num_rays_per_chunk=1 << 15),
+    vis="wandb",
+)
+
+UncertaintySemanticSDFTrackConfig = TrainerConfig(
+    method_name="uncertainty-semantic-sdf",
+    steps_per_eval_image=1500,
+    steps_per_eval_batch=500,
+    steps_per_save=5000,
+    steps_per_eval_all_images=1000000,
+    max_num_iterations=100001,
+    save_only_latest_checkpoint=True,
+    mixed_precision=False,
+    pipeline=VanillaPipelineConfig(
+        datamanager=VanillaDataManagerConfig(
+            _target=VanillaDataManager[BuildNetDataset],
+            dataparser=BuildNetDataParserConfig(
+                meta_json_filename="meta_data.json",
+                meta_rgb_path="images",
+                split_by_filename=False,
+                skip_every_for_val_split=8,
+                semantics=True,
+            ),
+            train_num_rays_per_batch=512,
+            eval_num_rays_per_batch=256,
+        ),
+        model=UncertaintySemanticSDFModelConfig(
+            # --- SDF field ---
+            sdf_field=UncertaintySemanticSDFFieldConfig(
+                bias=0.5,
+                beta_init=0.2,
+                inside_outside=False,
+                use_grid_feature=True,
+                use_appearance_embedding=False,
+                use_semantics=True,
+                num_semantic_classes=5,
+                # --- uncertainty ---
+                use_rgb_uncertainty=True,
+                rgb_beta_min=0.0001,
+                use_semantic_uncertainty=True,
+                semantic_beta_min=0.0001,
+            ),
+            # --- rendering ---
+            near_plane=0.05,
+            far_plane=50.0,
+            overwrite_near_far_plane=False,
+            background_model="none",
+            background_color="random",
+            use_average_appearance_embedding=False,
+            eval_num_rays_per_chunk=256,
+            # --- foreground ---
+            fg_loss_relat_mult=1000,
+            # --- semantics ---
+            use_semantics=True,
+            semantic_loss_mult=0.5,
+            # --- rgb uncertainty ---
+            use_rgb_uncertainty=True,
+            rgb_uncertainty_delay_steps=5000,
+            rgb_uncertainty_loss_mult=1.0,
+            # --- semantic uncertainty ---
             use_semantic_uncertainty=True,
             semantic_uncertainty_delay_steps=10000,
             reparameterize_semantic_uncertainty=True,
@@ -250,11 +333,6 @@ SemanticSDFTrackConfig = TrainerConfig(
                 warm_up_end=5000, learning_rate_alpha=0.01, max_steps=300001
             ),
         },
-        # "camera_opt": {
-        #     "mode": "off",
-        #     "optimizer": AdamOptimizerConfig(lr=1e-3, eps=1e-15),
-        #     "scheduler": ExponentialDecaySchedulerConfig(lr_final=1e-4, max_steps=10000),
-        # },
     },
     viewer=ViewerConfig(num_rays_per_chunk=1 << 15),
     vis="wandb",
@@ -262,5 +340,10 @@ SemanticSDFTrackConfig = TrainerConfig(
 
 semantic_sdf_method = MethodSpecification(
     config=SemanticSDFTrackConfig,
-    description="Custom Semantic SDF implementation",
+    description="Semantic SDF (NeuS + semantics)",
+)
+
+uncertainty_semantic_sdf_method = MethodSpecification(
+    config=UncertaintySemanticSDFTrackConfig,
+    description="Semantic SDF with RGB / semantic uncertainty",
 )

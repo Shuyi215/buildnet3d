@@ -1,9 +1,9 @@
 **/__pycache__/
 outputs/
+docs/
 bproc_generator/data/example
 buildnet3d/data/REAL
 buildnet3d/data/BuildNet3D
 buildnet3d/data/analyse
-buildnet3d/scripts/evaluate.py
 buildnet3d.egg-info
 .vscode

@@ -10,21 +10,22 @@ from buildnet3d.models.method_configs import (
     NeRFactoTrackConfig,
     SplatfactoTrackConfig,
     NeuSTrackConfig,
-    SemanticSDFTrackConfig
+    SemanticSDFTrackConfig,
+    UncertaintySemanticSDFTrackConfig,
 )
 
 @dataclass
 class TrainingConfig:
     """Configuration for training"""
 
-    model_type: str = "nerfacto"
+    model_type: str = "uncertainty-semantic-sdf"
     """What NeRF model to train. Defaults to NeuS"""
-    experiment_name: str = "realistic-2-nerfacto"
+    experiment_name: str = "test"
     """Name of the model to train"""
     output_dir: Path = "./outputs"
     """Where to save the model and outputs"""
     max_num_iterations: int = 100001
-    data: Path = "buildnet3d/data/BuildNet3D/realistic/building2"
+    data: Path = "buildnet3d/data/REAL/EXP1"
     """Where to find the input data """
     load_config: Optional[Path] = None
     load_dir: Optional[Path] = None
@@ -39,7 +40,8 @@ class TrainingConfig:
             "nerfacto": NeRFactoTrackConfig,
             "neus": NeuSTrackConfig,
             "semantic-sdf": SemanticSDFTrackConfig,
-            "splatfacto": SplatfactoTrackConfig
+            "uncertainty-semantic-sdf": UncertaintySemanticSDFTrackConfig,
+            "splatfacto": SplatfactoTrackConfig,
         }
         if self.model_type not in method_config:
             raise ValueError(f"Model type {self.model_type} not supported.")

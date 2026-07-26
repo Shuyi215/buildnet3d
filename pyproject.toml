@@ -11,9 +11,12 @@ dependencies = [
     "nerfstudio>=1.0.0",
 ]
 
+[project.optional-dependencies]
+logging = ["wandb>=0.13.3"]
 
 [project.entry-points.'nerfstudio.method_configs']
 semantic-sdf = "buildnet3d.models.method_configs:semantic_sdf_method"
+uncertainty-semantic-sdf = "buildnet3d.models.method_configs:uncertainty_semantic_sdf_method"
 
 [tool.setuptools.packages.find]
 include = ["buildnet3d*"]
