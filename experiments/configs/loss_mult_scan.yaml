@@ -1,0 +1,20 @@
+# Loss-multiplier scan for uncertainty-semantic-sdf.
+# Values under `sweep` form a Cartesian product; each combo is one run.
+# Override shared fields in `defaults` as needed.
+
+method: uncertainty-semantic-sdf
+prefix: lossmult
+data: buildnet3d/data/REAL/EXP1
+output_dir: ./outputs
+max_num_iterations: 20001
+
+defaults:
+  fg_loss_relat_mult: 1000
+  rgb_uncertainty_loss_mult: 1.0
+  semantic_uncertainty_loss_mult: 1.0
+
+# Expand lists to scan multiple values, e.g. [0.1, 1.0, 10.0]
+sweep:
+  fg_loss_relat_mult: [1000,800,500]
+  rgb_uncertainty_loss_mult: [1.0,0.5,0.1]
+  semantic_uncertainty_loss_mult: [0.5]

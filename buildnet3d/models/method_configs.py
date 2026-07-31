@@ -311,6 +311,7 @@ UncertaintySemanticSDFTrackConfig = TrainerConfig(
             # --- semantic uncertainty ---
             use_semantic_uncertainty=True,
             semantic_uncertainty_delay_steps=10000,
+            semantic_uncertainty_loss_mult=1.0,
             reparameterize_semantic_uncertainty=True,
             N_reparam_samples=10,
         ),

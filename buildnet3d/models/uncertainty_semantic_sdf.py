@@ -34,6 +34,8 @@ class UncertaintySemanticSDFModelConfig(SemanticSDFModelConfig):
     """Enable heteroscedastic semantic uncertainty modeling."""
     semantic_uncertainty_delay_steps: int = 10000
     """Number of steps to delay the semantic uncertainty loss."""
+    semantic_uncertainty_loss_mult: float = 1.0
+    """Global multiplier for the uncertainty-weighted semantic loss."""
     reparameterize_semantic_uncertainty: bool = True
     """Whether to use the reparameterization trick for semantic uncertainty."""
     N_reparam_samples: int = 10
@@ -158,6 +160,7 @@ class UncertaintySemanticSDFModel(SemanticSDFModel):
                 avg_log_prob = torch.log(avg_prob + 1e-8)
                 loss_dict["semantics_loss"] = (
                     self.config.semantic_loss_mult
+                    * self.config.semantic_uncertainty_loss_mult
                     * self.semantic_loss_nll(avg_log_prob, gt_semantics)
                 )
 
