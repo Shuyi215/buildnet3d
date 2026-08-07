@@ -1,0 +1,31 @@
+# EXP1 baseline pipeline: methods run in listed order.
+# Use `runs` for an explicit job list (vs Cartesian `sweep`).
+# Shared knobs go in `defaults`; per-job overrides / method go under each run.
+
+prefix: exp1
+data: buildnet3d/data/REAL/EXP1
+output_dir: ./outputs
+max_num_iterations: 150001
+
+defaults:
+  fg_loss_relat_mult: 0
+  train_num_rays_per_batch: 2048
+  eval_num_rays_per_batch: 2048
+  eval_num_rays_per_chunk: 1024
+  steps_per_eval_image: 1000
+  steps_per_eval_batch: 5000
+  steps_per_save: 10000
+
+runs:
+  - name: neus
+    method: neus
+  - name: semantic_sdf
+    method: semantic-sdf
+  - name: uncert_rgb
+    method: uncertainty-semantic-sdf
+    use_rgb_uncertainty: true
+    use_semantic_uncertainty: false
+  - name: uncert_rgb_sem
+    method: uncertainty-semantic-sdf
+    use_rgb_uncertainty: true
+    use_semantic_uncertainty: true

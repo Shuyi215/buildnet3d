@@ -14,7 +14,6 @@ from nerfstudio.engine.schedulers import (
     )
 
 from nerfstudio.models.nerfacto import NerfactoModelConfig
-from nerfstudio.models.neus import NeuSModelConfig
 from nerfstudio.fields.sdf_field import SDFFieldConfig
 from nerfstudio.models.splatfacto import SplatfactoModelConfig
 from nerfstudio.engine.trainer import TrainerConfig
@@ -24,6 +23,7 @@ from nerfstudio.plugins.types import MethodSpecification
 from buildnet3d.data.buildnet_dataset import BuildNetDataset
 from buildnet3d.data.buildnet_dataparser import BuildNetDataParserConfig
 
+from buildnet3d.models.buildnet_neus import BuildNetNeuSModelConfig
 from buildnet3d.models.semantic_sdf import SemanticSDFModelConfig
 from buildnet3d.models.semantic_sdf_field import SemanticSDFFieldConfig
 from buildnet3d.models.uncertainty_semantic_sdf import UncertaintySemanticSDFModelConfig
@@ -46,11 +46,16 @@ NeuSTrackConfig = TrainerConfig(
             dataparser=BuildNetDataParserConfig(
                 meta_json_filename="meta_data.json",
                 meta_rgb_path="images",
+                split_by_filename=False,
+                skip_every_for_val_split=8,
+                include_foreground_mask=True,
+                masks_path="masks",
+                semantics=False,
             ),
-            train_num_rays_per_batch=512,
-            eval_num_rays_per_batch=256,
+            train_num_rays_per_batch=1024,
+            eval_num_rays_per_batch=512,
         ),
-        model=NeuSModelConfig(
+        model=BuildNetNeuSModelConfig(
             sdf_field=SDFFieldConfig(
                 bias=0.5,
                 beta_init=0.2,
@@ -64,7 +69,7 @@ NeuSTrackConfig = TrainerConfig(
             background_color="random",
             overwrite_near_far_plane=False,
             use_average_appearance_embedding=False,
-            eval_num_rays_per_chunk=256,
+            eval_num_rays_per_chunk=512,
             eikonal_loss_mult=0.1,
         ),
     ),
@@ -188,7 +193,7 @@ SemanticSDFTrackConfig = TrainerConfig(
     steps_per_eval_batch=500,
     steps_per_save=5000,
     steps_per_eval_all_images=1000000,
-    max_num_iterations=100001,
+    max_num_iterations=150001,
     save_only_latest_checkpoint=True,
     mixed_precision=False,
     pipeline=VanillaPipelineConfig(
@@ -199,6 +204,8 @@ SemanticSDFTrackConfig = TrainerConfig(
                 meta_rgb_path="images",
                 split_by_filename=False,
                 skip_every_for_val_split=8,  # n=8 → 每 8 张取 1 张做 eval
+                include_foreground_mask=True,
+                masks_path="masks",
                 semantics=True,
             ),
             train_num_rays_per_batch=512,
@@ -224,7 +231,7 @@ SemanticSDFTrackConfig = TrainerConfig(
             use_average_appearance_embedding=False,
             eval_num_rays_per_chunk=256,
             # --- foreground ---
-            fg_loss_relat_mult=1000,
+            fg_loss_relat_mult=1,
             # --- semantics ---
             use_semantics=True,
             semantic_loss_mult=0.5,
@@ -270,6 +277,8 @@ UncertaintySemanticSDFTrackConfig = TrainerConfig(
                 meta_rgb_path="images",
                 split_by_filename=False,
                 skip_every_for_val_split=8,
+                include_foreground_mask=True,
+                masks_path="masks",
                 semantics=True,
             ),
             train_num_rays_per_batch=512,

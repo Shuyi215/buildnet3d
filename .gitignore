@@ -7,3 +7,9 @@ buildnet3d/data/BuildNet3D
 buildnet3d/data/analyse
 buildnet3d.egg-info
 .vscode
+.conda_envs/
+.conda_pkgs/
+scripts
+reconstruct.log
+setup_env.log
+setup_tcnn.log

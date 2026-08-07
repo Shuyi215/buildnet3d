@@ -33,7 +33,9 @@ class BuildNetDataParserConfig(DataParserConfig):
     depth_unit_scale_factor: float = 1e-3
     """Scales the depth values to meters (default: mm -> m)."""
     include_foreground_mask: bool = False
-    """Whether or not to load foreground mask."""
+    """Whether or not to load binary foreground masks from ``masks_path``."""
+    masks_path: str = "masks"
+    """Folder (under data root) with 0/255 binary foreground masks."""
     downscale_factor: int = 1
     """Downscale image size."""
     scene_scale: float = 2.0
@@ -69,7 +71,7 @@ class BuildNet(DataParser):
 
         image_filenames = []
         segmentation_filenames = []
-        # mask_filenames = []
+        fg_mask_filenames = []
         depth_filenames = []
         normal_filenames = []
         rgb_names = []
@@ -86,6 +88,15 @@ class BuildNet(DataParser):
 
             image_filenames.append(data_root / "images" / frame["rgb_path"])
 
+            if self.config.include_foreground_mask:
+                if "mask_path" not in frame:
+                    raise ValueError(
+                        "include_foreground_mask=True but frame is missing 'mask_path'. "
+                        f"rgb_path={frame.get('rgb_path')}"
+                    )
+                fg_mask_filenames.append(
+                    data_root / self.config.masks_path / frame["mask_path"]
+                )
             if self.config.semantics:
                 segmentation_filenames.append(data_root / "semantic" / frame["segmentation_path"])
             if use_mono_prior:
@@ -160,6 +171,15 @@ class BuildNet(DataParser):
         # Apply split to file lists
         image_filenames = [image_filenames[i] for i in indices]
 
+        if self.config.include_foreground_mask:
+            fg_mask_filenames = [fg_mask_filenames[i] for i in indices]
+            missing = [p for p in fg_mask_filenames if not p.is_file()]
+            if missing:
+                raise FileNotFoundError(
+                    f"Missing {len(missing)} foreground mask file(s). "
+                    f"First missing: {missing[0]}"
+                )
+
         if self.config.semantics:
             segmentation_filenames = [segmentation_filenames[i] for i in indices]
 
@@ -210,7 +230,7 @@ class BuildNet(DataParser):
             camera_type=CameraType.PERSPECTIVE,
         )
 
-        # Segmentation information
+        # Segmentation information (labels only; fg_mask comes from binary masks/)
         semantics_obj = None
         if self.config.semantics:
             panoptic_classes = load_from_json(data_root / "segmentation_data.json")
@@ -220,24 +240,25 @@ class BuildNet(DataParser):
                 filenames=segmentation_filenames,
                 classes=classes,
                 colors=colors,
-                mask_classes=["0"],
+                mask_classes=[],
             )
 
         # Helpful log
         split_mode = "filename" if self.config.split_by_filename else "interval"
         CONSOLE.log(
             f"[BuildNet] mode={split_mode}, split='{split}': {len(indices)} images "
-            f"(train={len(train_indices)}, eval={len(eval_indices)})"
+            f"(train={len(train_indices)}, eval={len(eval_indices)}, "
+            f"fg_mask={self.config.include_foreground_mask}, semantics={self.config.semantics})"
         )
 
         dataparser_outputs = DataparserOutputs(
             image_filenames=image_filenames,
             cameras=cameras,
             scene_box=scene_box,
-            # mask_filenames=mask_filenames if len(mask_filenames) > 0 else None,
             metadata={
                 "transform": transform,
                 "semantics": semantics_obj,
+                "fg_mask_filenames": fg_mask_filenames if self.config.include_foreground_mask else None,
                 "camera_to_worlds": c2w_colmap if len(c2w_colmap) > 0 else None,
                 "include_mono_prior": use_mono_prior,
                 "depth_filenames": depth_filenames if use_mono_prior else None,

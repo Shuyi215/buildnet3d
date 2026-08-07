@@ -6,9 +6,10 @@ method: uncertainty-semantic-sdf
 prefix: lossmult
 data: buildnet3d/data/REAL/EXP1
 output_dir: ./outputs
-max_num_iterations: 20001
+max_num_iterations: 40001
 
 defaults:
+  train_num_rays_per_batch: 1024
   fg_loss_relat_mult: 1000
   rgb_uncertainty_loss_mult: 1.0
   semantic_uncertainty_loss_mult: 1.0

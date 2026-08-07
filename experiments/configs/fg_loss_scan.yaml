@@ -1,0 +1,16 @@
+# FG loss-multiplier scan with both uncertainty heads disabled.
+# Values under `sweep` form a Cartesian product; each combo is one run.
+
+method: uncertainty-semantic-sdf
+prefix: fgscan
+data: buildnet3d/data/REAL/EXP1
+output_dir: ./outputs
+max_num_iterations: 40001
+
+defaults:
+  train_num_rays_per_batch: 1048
+  use_rgb_uncertainty: false
+  use_semantic_uncertainty: false
+
+sweep:
+  fg_loss_relat_mult: [500, 250, 50, 10, 750]

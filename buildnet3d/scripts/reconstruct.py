@@ -38,6 +38,11 @@ class TrainingConfig:
     use_average_appearance_embedding: Optional[bool] = True
     use_grid_feature: Optional[bool] = True
 
+    # Trainer schedule overrides
+    steps_per_eval_image: Optional[int] = None
+    steps_per_eval_batch: Optional[int] = None
+    steps_per_save: Optional[int] = None
+
     # Model / datamanager overrides (used by experiments/*.yaml sweeps)
     fg_loss_relat_mult: Optional[float] = None
     rgb_uncertainty_loss_mult: Optional[float] = None
@@ -49,6 +54,8 @@ class TrainingConfig:
     semantic_uncertainty_delay_steps: Optional[int] = None
     N_reparam_samples: Optional[int] = None
     train_num_rays_per_batch: Optional[int] = None
+    eval_num_rays_per_batch: Optional[int] = None
+    eval_num_rays_per_chunk: Optional[int] = None
 
     def __post_init__(self) -> None:
         method_config = {
@@ -69,6 +76,13 @@ class TrainingConfig:
         self.model.load_config = self.load_config
         self.model.load_dir = self.load_dir
 
+        if self.steps_per_eval_image is not None:
+            self.model.steps_per_eval_image = self.steps_per_eval_image
+        if self.steps_per_eval_batch is not None:
+            self.model.steps_per_eval_batch = self.steps_per_eval_batch
+        if self.steps_per_save is not None:
+            self.model.steps_per_save = self.steps_per_save
+
         model_cfg = self.model.pipeline.model
         if self.fg_loss_relat_mult is not None:
             model_cfg.fg_loss_relat_mult = self.fg_loss_relat_mult
@@ -80,8 +94,12 @@ class TrainingConfig:
             model_cfg.semantic_loss_mult = self.semantic_loss_mult
         if self.use_rgb_uncertainty is not None:
             model_cfg.use_rgb_uncertainty = self.use_rgb_uncertainty
+            model_cfg.sdf_field.use_rgb_uncertainty = self.use_rgb_uncertainty
         if self.use_semantic_uncertainty is not None:
             model_cfg.use_semantic_uncertainty = self.use_semantic_uncertainty
+            model_cfg.sdf_field.use_semantic_uncertainty = (
+                self.use_semantic_uncertainty
+            )
         if self.rgb_uncertainty_delay_steps is not None:
             model_cfg.rgb_uncertainty_delay_steps = self.rgb_uncertainty_delay_steps
         if self.semantic_uncertainty_delay_steps is not None:
@@ -94,6 +112,12 @@ class TrainingConfig:
             self.model.pipeline.datamanager.train_num_rays_per_batch = (
                 self.train_num_rays_per_batch
             )
+        if self.eval_num_rays_per_batch is not None:
+            self.model.pipeline.datamanager.eval_num_rays_per_batch = (
+                self.eval_num_rays_per_batch
+            )
+        if self.eval_num_rays_per_chunk is not None:
+            model_cfg.eval_num_rays_per_chunk = self.eval_num_rays_per_chunk
 
 
 if __name__ == "__main__":

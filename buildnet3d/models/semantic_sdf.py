@@ -67,7 +67,6 @@ class SemanticSDFModel(NeuSModel):
         )
 
         self.renderer_semantics = SemanticRenderer()
-        self.rgb_loss = torch.nn.MSELoss(reduction="mean")
         self.semantic_loss = torch.nn.CrossEntropyLoss(reduction="mean")
 
     def get_outputs(self, ray_bundle: RayBundle) -> Dict[str, torch.Tensor]:
