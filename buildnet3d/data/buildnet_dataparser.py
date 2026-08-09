@@ -48,7 +48,7 @@ class BuildNetDataParserConfig(DataParserConfig):
     skip_every_for_val_split: int = 1
     """Used when split_by_filename=False. Every Nth frame goes to eval."""
     auto_orient: bool = True
-    """Orient poses correctly."""
+    """Orient/center all poses once, then split train/eval by index."""
     semantics: bool = False
     """Whether or not to load semantics."""
 
@@ -76,7 +76,7 @@ class BuildNet(DataParser):
         normal_filenames = []
         rgb_names = []
 
-        transform = None
+        transform = torch.eye(4, dtype=torch.float32)[:3, :]
         fx = []
         fy = []
         cx = []
@@ -118,6 +118,15 @@ class BuildNet(DataParser):
         cx = torch.stack(cx)
         cy = torch.stack(cy)
         c2w_colmap_full = torch.stack(camera_to_worlds)
+
+        # Orient/center on ALL poses first so train and eval share one transform.
+        camera_to_worlds_full = c2w_colmap_full.clone()
+        if self.config.auto_orient:
+            camera_to_worlds_full, transform = camera_utils.auto_orient_and_center_poses(
+                camera_to_worlds_full,
+                method="none",
+                center_method="focus",
+            )
 
         # -------- Data Split (filename OR interval) --------
         all_indices = list(range(len(image_filenames)))
@@ -187,21 +196,13 @@ class BuildNet(DataParser):
             depth_filenames = [depth_filenames[i] for i in indices]
             normal_filenames = [normal_filenames[i] for i in indices]
 
-        # Apply split to camera tensors
+        # Apply split to camera tensors (after shared orient/center)
         fx = fx[indices]
         fy = fy[indices]
         cx = cx[indices]
         cy = cy[indices]
         c2w_colmap = c2w_colmap_full[indices].clone()
-        camera_to_worlds = c2w_colmap.clone()
-
-        # Auto-orient on the selected split
-        if self.config.auto_orient:
-            camera_to_worlds, transform = camera_utils.auto_orient_and_center_poses(
-                camera_to_worlds,
-                method="none",
-                center_method="focus",
-            )
+        camera_to_worlds = camera_to_worlds_full[indices].clone()
 
         # Scene box
         meta_scene_box = meta["scene_box"]
@@ -248,13 +249,15 @@ class BuildNet(DataParser):
         CONSOLE.log(
             f"[BuildNet] mode={split_mode}, split='{split}': {len(indices)} images "
             f"(train={len(train_indices)}, eval={len(eval_indices)}, "
-            f"fg_mask={self.config.include_foreground_mask}, semantics={self.config.semantics})"
+            f"fg_mask={self.config.include_foreground_mask}, semantics={self.config.semantics}, "
+            f"auto_orient={self.config.auto_orient})"
         )
 
         dataparser_outputs = DataparserOutputs(
             image_filenames=image_filenames,
             cameras=cameras,
             scene_box=scene_box,
+            dataparser_transform=transform,
             metadata={
                 "transform": transform,
                 "semantics": semantics_obj,
