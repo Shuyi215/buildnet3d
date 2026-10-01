@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw, ImageFont
 from nerfstudio.cameras.rays import RayBundle
 from nerfstudio.utils import colormaps
 from nerfstudio.utils.colormaps import ColormapOptions
+from nerfstudio.utils.rich_utils import CONSOLE
 
 from buildnet3d.models.semantic_sdf import SemanticSDFModel, SemanticSDFModelConfig
 
@@ -46,6 +47,23 @@ class UncertaintySemanticSDFModel(SemanticSDFModel):
     """SemanticSDFModel extended with RGB and semantic uncertainty."""
 
     config: UncertaintySemanticSDFModelConfig
+
+    def __init__(
+        self,
+        config: UncertaintySemanticSDFModelConfig,
+        metadata: Dict,
+        **kwargs,
+    ) -> None:
+        if metadata.get("semantics") is None:
+            config.use_semantics = False
+            config.use_semantic_uncertainty = False
+            config.sdf_field.use_semantics = False
+            config.sdf_field.use_semantic_uncertainty = False
+            CONSOLE.print(
+                "[bold yellow]WARNING:[/bold yellow] No semantic data was loaded. "
+                "The uncertainty model will not reconstruct semantics or use semantic loss."
+            )
+        super().__init__(config=config, metadata=metadata, **kwargs)
 
     def populate_modules(self) -> None:
         super().populate_modules()

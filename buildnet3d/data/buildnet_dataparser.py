@@ -49,6 +49,8 @@ class BuildNetDataParserConfig(DataParserConfig):
     """Used when split_by_filename=False. Every Nth frame goes to eval."""
     auto_orient: bool = True
     """Orient/center all poses once, then split train/eval by index."""
+    auto_scale_poses: bool = False
+    """Normalize camera translations. COLMAP-generated metadata enables this automatically."""
     semantics: bool = False
     """Whether or not to load semantics."""
 
@@ -67,6 +69,16 @@ class BuildNet(DataParser):
             meta = load_from_json(self.config.data / self.config.meta_json_filename)
             data_root = self.config.data
 
+        use_semantics = self.config.semantics
+        semantic_dir = data_root / "semantic"
+        if use_semantics and not semantic_dir.is_dir():
+            use_semantics = False
+            CONSOLE.print(
+                "[bold yellow]WARNING:[/bold yellow] "
+                f"Semantic directory not found: {semantic_dir}. "
+                "Semantic reconstruction and semantic loss will be disabled."
+            )
+
         use_mono_prior: bool = ("has_mono_prior" in meta and meta["has_mono_prior"] is True)
 
         image_filenames = []
@@ -81,6 +93,8 @@ class BuildNet(DataParser):
         fy = []
         cx = []
         cy = []
+        heights = []
+        widths = []
         camera_to_worlds = []
         for frame in meta["frames"]:
             rgb_name = Path(frame["rgb_path"]).name
@@ -97,8 +111,8 @@ class BuildNet(DataParser):
                 fg_mask_filenames.append(
                     data_root / self.config.masks_path / frame["mask_path"]
                 )
-            if self.config.semantics:
-                segmentation_filenames.append(data_root / "semantic" / frame["segmentation_path"])
+            if use_semantics:
+                segmentation_filenames.append(semantic_dir / frame["segmentation_path"])
             if use_mono_prior:
                 depth_filenames.append(data_root / frame["depth_path"])
                 normal_filenames.append(data_root / frame["normals_path"])
@@ -110,6 +124,8 @@ class BuildNet(DataParser):
             fy.append(intrinsics[1, 1])
             cx.append(intrinsics[0, 2])
             cy.append(intrinsics[1, 2])
+            heights.append(int(frame.get("height", meta["height"])))
+            widths.append(int(frame.get("width", meta["width"])))
             camera_to_worlds.append(camtoworld)
 
         # Stack tensors
@@ -117,6 +133,8 @@ class BuildNet(DataParser):
         fy = torch.stack(fy)
         cx = torch.stack(cx)
         cy = torch.stack(cy)
+        heights = torch.tensor(heights, dtype=torch.int64)
+        widths = torch.tensor(widths, dtype=torch.int64)
         c2w_colmap_full = torch.stack(camera_to_worlds)
 
         # Orient/center on ALL poses first so train and eval share one transform.
@@ -128,12 +146,29 @@ class BuildNet(DataParser):
                 center_method="focus",
             )
 
+        # COLMAP reconstructions have an arbitrary global scale. Normalize them
+        # into the configured scene box, while preserving legacy synthetic data.
+        auto_scale_poses = self.config.auto_scale_poses or meta.get("auto_scale_poses", False)
+        scale_factor = 1.0
+        if auto_scale_poses:
+            max_translation = torch.max(torch.abs(camera_to_worlds_full[:, :3, 3]))
+            if float(max_translation) > 0.0:
+                scale_factor = self.config.scene_scale / float(max_translation)
+                camera_to_worlds_full[:, :3, 3] *= scale_factor
+
         # -------- Data Split (filename OR interval) --------
         all_indices = list(range(len(image_filenames)))
         train_indices = []
         eval_indices = []
 
-        if self.config.split_by_filename:
+        has_filename_tags = any("train" in name or "eval" in name for name in rgb_names)
+        use_filename_split = self.config.split_by_filename and has_filename_tags
+        if self.config.split_by_filename and not has_filename_tags:
+            CONSOLE.log(
+                "[BuildNet] No train/eval filename tags found; falling back to interval splitting."
+            )
+
+        if use_filename_split:
             for i, rgb_name in enumerate(rgb_names):
                 if "train" in rgb_name:
                     train_indices.append(i)
@@ -167,7 +202,7 @@ class BuildNet(DataParser):
             raise ValueError(f"Unknown split '{split}'")
 
         if len(indices) == 0:
-            if self.config.split_by_filename:
+            if use_filename_split:
                 raise ValueError(
                     f"No images found for split='{split}'. "
                     "Check rgb_path naming (expected frame_train_* or frame_eval_*)."
@@ -189,7 +224,7 @@ class BuildNet(DataParser):
                     f"First missing: {missing[0]}"
                 )
 
-        if self.config.semantics:
+        if use_semantics:
             segmentation_filenames = [segmentation_filenames[i] for i in indices]
 
         if use_mono_prior:
@@ -201,6 +236,8 @@ class BuildNet(DataParser):
         fy = fy[indices]
         cx = cx[indices]
         cy = cy[indices]
+        heights = heights[indices]
+        widths = widths[indices]
         c2w_colmap = c2w_colmap_full[indices].clone()
         camera_to_worlds = camera_to_worlds_full[indices].clone()
 
@@ -218,22 +255,21 @@ class BuildNet(DataParser):
             p1=float(meta["p1"]) if "p1" in meta else 0.0,
             p2=float(meta["p2"]) if "p2" in meta else 0.0,
         )
-        height, width = meta["height"], meta["width"]
         cameras = Cameras(
             fx=fx,
             fy=fy,
             cx=cx,
             cy=cy,
             distortion_params=distortion_params,
-            height=height,
-            width=width,
+            height=heights,
+            width=widths,
             camera_to_worlds=camera_to_worlds[:, :3, :4],
             camera_type=CameraType.PERSPECTIVE,
         )
 
         # Segmentation information (labels only; fg_mask comes from binary masks/)
         semantics_obj = None
-        if self.config.semantics:
+        if use_semantics:
             panoptic_classes = load_from_json(data_root / "segmentation_data.json")
             classes = list(panoptic_classes.keys())
             colors = torch.tensor(list(panoptic_classes.values()), dtype=torch.float32)
@@ -245,11 +281,11 @@ class BuildNet(DataParser):
             )
 
         # Helpful log
-        split_mode = "filename" if self.config.split_by_filename else "interval"
+        split_mode = "filename" if use_filename_split else "interval"
         CONSOLE.log(
             f"[BuildNet] mode={split_mode}, split='{split}': {len(indices)} images "
             f"(train={len(train_indices)}, eval={len(eval_indices)}, "
-            f"fg_mask={self.config.include_foreground_mask}, semantics={self.config.semantics}, "
+            f"fg_mask={self.config.include_foreground_mask}, semantics={use_semantics}, "
             f"auto_orient={self.config.auto_orient})"
         )
 
@@ -257,9 +293,11 @@ class BuildNet(DataParser):
             image_filenames=image_filenames,
             cameras=cameras,
             scene_box=scene_box,
+            dataparser_scale=scale_factor,
             dataparser_transform=transform,
             metadata={
                 "transform": transform,
+                "scale_factor": scale_factor,
                 "semantics": semantics_obj,
                 "fg_mask_filenames": fg_mask_filenames if self.config.include_foreground_mask else None,
                 "camera_to_worlds": c2w_colmap if len(c2w_colmap) > 0 else None,

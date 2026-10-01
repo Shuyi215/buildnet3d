@@ -125,13 +125,11 @@ class UncertaintySemanticSDFField(SemanticSDFField):
             inputs, directions_flat, gradients, geo_feature, camera_indices
         )
 
-        semantics_input = geo_feature.view(-1, self.config.geo_feat_dim)
-        semantics_output = self.mlp_semantic(semantics_input)
-        semantics = self.field_head_semantic(semantics_output)
+        features = geo_feature.view(-1, self.config.geo_feat_dim)
 
         rgb_logvar = None
         if self.config.use_rgb_uncertainty:
-            u_feat = self.mlp_rgb_uncertainty(semantics_input)
+            u_feat = self.mlp_rgb_uncertainty(features)
             raw_rgb_logvar = self.rgb_uncertainty_out(u_feat)
             rgb_logvar = torch.log(
                 self.config.rgb_beta_min + torch.exp(raw_rgb_logvar)
@@ -139,7 +137,7 @@ class UncertaintySemanticSDFField(SemanticSDFField):
 
         semantic_logvar = None
         if self.config.use_semantic_uncertainty:
-            su_feat = self.mlp_semantic_uncertainty(semantics_input)
+            su_feat = self.mlp_semantic_uncertainty(features)
             raw_semantic_logvar = self.semantic_uncertainty_out(su_feat)
             semantic_logvar = torch.log(
                 self.config.semantic_beta_min + torch.exp(raw_semantic_logvar)
@@ -150,7 +148,6 @@ class UncertaintySemanticSDFField(SemanticSDFField):
         sdf = sdf.view(*sample_shape, -1)
         gradients = gradients.view(*sample_shape, -1)
         normals = torch.nn.functional.normalize(gradients, p=2, dim=-1)
-        semantics = semantics.view(*sample_shape, -1)
         if rgb_logvar is not None:
             rgb_logvar = rgb_logvar.view(*sample_shape, -1)
         if semantic_logvar is not None:
@@ -165,6 +162,9 @@ class UncertaintySemanticSDFField(SemanticSDFField):
             }
         )
         if self.config.use_semantics:
+            semantics_output = self.mlp_semantic(features)
+            semantics = self.field_head_semantic(semantics_output)
+            semantics = semantics.view(*sample_shape, -1)
             outputs[FieldHeadNames.SEMANTICS] = semantics
         if rgb_logvar is not None:
             outputs["rgb_uncertainty_logvar"] = rgb_logvar

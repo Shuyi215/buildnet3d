@@ -42,15 +42,17 @@ class SemanticSDFModel(NeuSModel):
     ) -> None:
         super().__init__(config=config, **kwargs)
 
-        assert "semantics" in metadata.keys() and isinstance(
-            metadata["semantics"], Semantics
-        )
-        self.colormap = metadata["semantics"].colors.clone().detach().to(self.device)
-
-        self.color_mapping = {
-            tuple(np.round(np.array(color), 3)): index
-            for index, color in enumerate(metadata["semantics"].colors.tolist())
-        }
+        semantics = metadata.get("semantics")
+        if self.config.use_semantics:
+            assert isinstance(semantics, Semantics)
+            self.colormap = semantics.colors.clone().detach().to(self.device)
+            self.color_mapping = {
+                tuple(np.round(np.array(color), 3)): index
+                for index, color in enumerate(semantics.colors.tolist())
+            }
+        else:
+            self.colormap = None
+            self.color_mapping = {}
         self._logger = logging.getLogger(__name__)
 
     def populate_modules(self) -> None:

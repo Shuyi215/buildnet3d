@@ -50,17 +50,18 @@ class SemanticSDFField(SDFField):
         )
 
         self.num_semantic_classes = self.config.num_semantic_classes
-        self.mlp_semantic = MLP(
-            in_dim=self.config.geo_feat_dim,
-            layer_width=self.config.semantic_mlp_layer_width,
-            num_layers=self.config.semantic_mlp_number_layers,
-            activation=nn.ReLU(),
-            out_activation=nn.ReLU(),
-        )
-        self.field_head_semantic = SemanticFieldHead(
-            in_dim=self.mlp_semantic.get_out_dim(),
-            num_classes=self.num_semantic_classes,
-        )
+        if self.config.use_semantics:
+            self.mlp_semantic = MLP(
+                in_dim=self.config.geo_feat_dim,
+                layer_width=self.config.semantic_mlp_layer_width,
+                num_layers=self.config.semantic_mlp_number_layers,
+                activation=nn.ReLU(),
+                out_activation=nn.ReLU(),
+            )
+            self.field_head_semantic = SemanticFieldHead(
+                in_dim=self.mlp_semantic.get_out_dim(),
+                num_classes=self.num_semantic_classes,
+            )
 
     def get_outputs(
         self,
@@ -101,15 +102,10 @@ class SemanticSDFField(SDFField):
             inputs, directions_flat, gradients, geo_feature, camera_indices
         )
 
-        semantics_input = geo_feature.view(-1, self.config.geo_feat_dim)
-        semantics_output = self.mlp_semantic(semantics_input)
-        semantics = self.field_head_semantic(semantics_output)
-
         rgb = rgb.view(*ray_samples.frustums.directions.shape[:-1], -1)
         sdf = sdf.view(*ray_samples.frustums.directions.shape[:-1], -1)
         gradients = gradients.view(*ray_samples.frustums.directions.shape[:-1], -1)
         normals = torch.nn.functional.normalize(gradients, p=2, dim=-1)
-        semantics = semantics.view(*ray_samples.frustums.directions.shape[:-1], -1)
 
         outputs.update(
             {
@@ -120,6 +116,12 @@ class SemanticSDFField(SDFField):
             }
         )
         if self.config.use_semantics:
+            semantics_input = geo_feature.view(-1, self.config.geo_feat_dim)
+            semantics_output = self.mlp_semantic(semantics_input)
+            semantics = self.field_head_semantic(semantics_output)
+            semantics = semantics.view(
+                *ray_samples.frustums.directions.shape[:-1], -1
+            )
             outputs[FieldHeadNames.SEMANTICS] = semantics
 
         if return_alphas:
