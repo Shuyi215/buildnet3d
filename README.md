@@ -2,6 +2,10 @@
 
 **Uncertainty-aware semantic SDF reconstruction for building envelopes.**
 
+![Conceptual animation of uncertainty-aware building reconstruction](assets/readme-hero.gif)
+
+*Conceptual illustration: noisy observations, learned uncertainty, and a semantic building surface. The experiment figures below show actual results.*
+
 > A window edge is blurred. A tree hides part of a facade. A camera pose drifts. A semantic mask gets a roof pixel wrong. A reconstruction system should not treat all of those observations as equally trustworthy.
 
 This research fork extends [BuildNet3D](https://github.com/EPFL-IMOS/buildnet3d) with an SDF model that predicts **RGB and semantic uncertainty** alongside geometry, color, and semantic labels. The goal is to make building reconstruction more robust when images and labels are imperfect.
